@@ -66,3 +66,24 @@ def estimate(project: ProjectOpt, scene: ScenesOpt = None, takes: TakesOpt = 1, 
     for sid, why in est.skipped.items():
         typer.echo(f"  bỏ qua {sid}: {why}")
     typer.echo(f"Tổng: {est.seconds}s ≈ {est.usd:.2f} USD · đã tiêu {state.spent_usd:.2f}/{script.budget_usd:.2f} USD")
+
+
+@command
+def tts(project: ProjectOpt, scene: ScenesOpt = None, force: ForceOpt = False, config: ConfigOpt = None):
+    """Tạo voice-over bằng Gemini TTS."""
+    from vidflow.gemini import GeminiSpeechClient
+    from vidflow.inputs import MIN_CLIP_SPEED, SCENE_PAD_S
+    from vidflow.tts import run_tts
+
+    p = Project.open(project)
+    done = run_tts(p, load_config(config), GeminiSpeechClient(), scene_ids=scene, force=force)
+    script, state = p.load_script(), p.load_state()
+    for s in script.scenes:
+        t = state.scenes.get(s.id)
+        if not t or not t.tts:
+            continue
+        need = t.tts.duration_s / script.voice.speed + SCENE_PAD_S
+        mark = "mới" if s.id in done else "giữ"
+        warn = f"  ⚠ dài hơn clip {s.duration}s có thể kéo (tối đa {s.duration / MIN_CLIP_SPEED:.1f}s)" \
+            if need > s.duration / MIN_CLIP_SPEED else ""
+        typer.echo(f"  {s.id} [{mark}] {t.tts.file} {t.tts.duration_s:.2f}s{warn}")
