@@ -77,6 +77,19 @@ def build_draft(project: Project, cfg: Config, script: Script, timeline: Timelin
         shutil.copytree(cfg.draft_folder / name, project.backups_dir / stamp() / name)
     stage = _MediaStage(project, cfg.media_folder / name)
 
+    try:
+        draft_dir = _write_draft(project, folder, name, script, timeline, stage)
+    except ValueError as e:  # pyCapCut báo lỗi thời gian/segment bằng ValueError
+        raise VidflowError(f"pyCapCut từ chối dựng draft: {e}") from e
+
+    state = project.load_state()
+    state.draft_path = str(draft_dir)
+    state.last_build_at = stamp()
+    project.save_state(state)
+    return draft_dir
+
+
+def _write_draft(project: Project, folder, name: str, script: Script, timeline: Timeline, stage) -> Path:
     w, h = canvas_size(script.aspect)
     draft = folder.create_draft(name, w, h, allow_replace=True)
     draft.add_track(cc.TrackType.video)
@@ -115,11 +128,6 @@ def build_draft(project: Project, cfg: Config, script: Script, timeline: Timelin
 
     draft.save()
     # CapCut 9.5 macOS đọc draft_info.json; pyCapCut chỉ ghi draft_content.json
-    draft_dir = cfg.draft_folder / name
+    draft_dir = Path(folder.folder_path) / name
     shutil.copy(draft_dir / "draft_content.json", draft_dir / "draft_info.json")
-
-    state = project.load_state()
-    state.draft_path = str(draft_dir)
-    state.last_build_at = stamp()
-    project.save_state(state)
     return draft_dir

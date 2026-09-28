@@ -146,3 +146,18 @@ def test_missing_draft_folder(project, cfg, tmp_path):
     with pytest.raises(ConfigError, match="draft_folder"):
         build_draft(project, dataclasses.replace(cfg, draft_folder=tmp_path / "nope"), script, tl,
                     is_running=lambda: False)
+
+
+def test_clip_with_longer_audio_track_builds(project, cfg):
+    """Veo MP4 có thể có track audio dài hơn video; phải đo theo track video."""
+    import subprocess
+    state = prepare(project)
+    clip = project.clips_dir / "s02_t1.mp4"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=216x384:rate=30",
+                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono", "-t", "2", "-map", "0:v", "-t", "2",
+                    "-map", "1:a", "-t", "2.3", "-pix_fmt", "yuv420p", str(clip)], check=True)
+    from vidflow.media import video_duration
+    script = project.load_script()
+    clips = {t.file: video_duration(project.path(t.file)) for st in state.scenes.values() for t in st.takes}
+    tl = plan_timeline(script, state, clips)
+    build_draft(project, cfg, script, tl, is_running=lambda: False, stamp=lambda: "S1")

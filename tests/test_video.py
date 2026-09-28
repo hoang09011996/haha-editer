@@ -59,7 +59,7 @@ def test_second_run_is_noop(project, cfg):
 
 
 def test_resume_pending_without_resubmit(project, cfg):
-    class Crash(Exception):
+    class Crash(KeyboardInterrupt):  # tiến trình bị dừng giữa lúc poll
         pass
 
     class CrashingVeo(FakeVeo):
@@ -122,3 +122,65 @@ def test_pick_take(project, cfg):
     assert project.load_state().scenes["s01"].picked == 1
     with pytest.raises(ScriptError, match="1..2"):
         pick_take(project, "s01", 3)
+
+
+def test_late_stale_op_does_not_steal_pick(project, cfg):
+    from vidflow.inputs import video_hash
+    from vidflow.state import PendingOp, Take
+    script = project.load_script()
+    current = video_hash(project, script, script.scene("s01"), cfg)
+    state = project.load_state()
+    st = state.scene("s01")
+    st.takes = [Take(file="clips/s01_t1.mp4", input_hash=current, cost_usd=0, created_at="t")]
+    st.picked = 0
+    st.pending = [PendingOp(name="old", input_hash="stale", seconds=8, submitted_at="t")]
+    project.save_state(state)
+    fake = FakeVeo(polls_needed=1)
+    fake.submitted = [{"name": "old", "prompt": "Close-up", "duration": 8, "aspect": "9:16"}]
+    run(project, cfg, fake, scene_ids=["s01"])
+    st = project.load_state().scenes["s01"]
+    assert len(st.takes) == 2 and st.picked == 0
+
+
+def test_permanent_poll_error_drops_op_and_continues(project, cfg):
+    class NotFound(Exception):
+        code = 404
+
+    class BrokenVeo(FakeVeo):
+        def poll(self, op_name):
+            if op_name == "op1":
+                raise NotFound("operation expired")
+            return super().poll(op_name)
+
+    rep = run(project, cfg, BrokenVeo(polls_needed=1))
+    assert rep.created == ["clips/s02_t1.mp4"]
+    assert "operation expired" in rep.failed["s01"]
+    st = project.load_state().scenes["s01"]
+    assert st.pending == [] and "operation expired" in st.errors[-1]
+
+
+def test_permanent_download_error_drops_op(project, cfg):
+    class Gone(Exception):
+        code = 403
+
+    class NoDownload(FakeVeo):
+        def download(self, video, dest):
+            raise Gone("uri expired")
+
+    rep = run(project, cfg, NoDownload(polls_needed=1), scene_ids=["s01"])
+    assert "uri expired" in rep.failed["s01"]
+    st = project.load_state()
+    assert st.scenes["s01"].pending == [] and st.scenes["s01"].takes == [] and st.spent_usd == 0
+
+
+def test_transient_poll_error_keeps_op_pending(project, cfg):
+    class Unavailable(Exception):
+        code = 503
+
+    class DownVeo(FakeVeo):
+        def poll(self, op_name):
+            raise Unavailable()
+
+    with pytest.raises(Unavailable):
+        run(project, cfg, DownVeo(), scene_ids=["s01"])
+    assert [p.name for p in project.load_state().scenes["s01"].pending] == ["op1"]

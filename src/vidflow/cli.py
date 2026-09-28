@@ -165,14 +165,14 @@ def status(project: ProjectOpt, config: ConfigOpt = None):
 def build(project: ProjectOpt, config: ConfigOpt = None):
     """Dựng draft CapCut Desktop từ clip đã chọn, voice-over, phụ đề, nhạc."""
     from vidflow.capcut_draft import build_draft
-    from vidflow.media import probe_duration
+    from vidflow.media import video_duration
     from vidflow.timeline import plan_timeline
 
     p = Project.open(project)
     cfg = load_config(config)
     script, state = p.load_script(), p.load_state()
     clips = {st.takes[st.picked].file for st in state.scenes.values() if st.picked is not None}
-    tl = plan_timeline(script, state, {c: probe_duration(p.path(c)) for c in clips})
+    tl = plan_timeline(script, state, {c: video_duration(p.path(c)) for c in clips})
     for sid, why in tl.skipped.items():
         typer.secho(f"  bỏ qua {sid}: {why}", fg=typer.colors.YELLOW)
     path = build_draft(p, cfg, script, tl)

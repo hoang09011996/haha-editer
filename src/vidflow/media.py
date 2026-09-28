@@ -39,3 +39,13 @@ def probe_duration(path: Path) -> float:
     if r.returncode != 0 or not r.stdout.strip():
         raise VidflowError(f"ffprobe không đọc được {path}: {r.stderr.strip()}")
     return float(r.stdout.strip())
+
+
+def video_duration(path: Path) -> float:
+    """Độ dài track video theo đúng cách pyCapCut đo (pymediainfo), không phải độ dài container."""
+    import pycapcut as cc
+
+    try:
+        return cc.VideoMaterial(str(path)).duration / 1_000_000
+    except Exception as e:
+        raise VidflowError(f"Không đọc được clip {path}: {e}") from e

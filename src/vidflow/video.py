@@ -9,9 +9,9 @@ from typing import Any, Callable, Protocol
 from vidflow.config import Config
 from vidflow.cost import check_budget, plan_gen
 from vidflow.errors import ScriptError, VidflowError
-from vidflow.inputs import compose_veo_prompt, scene_ref_images
+from vidflow.inputs import compose_veo_prompt, scene_ref_images, video_hash
 from vidflow.project import Project
-from vidflow.retry import with_retry
+from vidflow.retry import is_transient, with_retry
 from vidflow.state import PendingOp, Take
 
 
@@ -62,28 +62,37 @@ def run_gen(project: Project, cfg: Config, client: VideoClient, *, scene_ids: li
         project.save_state(state)
 
     wanted = set(scene_ids) if scene_ids else set(scenes)
+    current_hash = {sid: video_hash(project, script, scenes[sid], cfg) for sid in wanted if sid in scenes}
+    wanted = set(current_hash)
     deadline = clock() + timeout_s
     while True:
         open_ops = [(sid, op) for sid, st in state.scenes.items() if sid in wanted for op in list(st.pending)]
         if not open_ops:
             return report
         for sid, op in open_ops:
-            res = with_retry(lambda: client.poll(op.name), sleep=sleep)
+            st = state.scene(sid)
+            try:
+                res = with_retry(lambda: client.poll(op.name), sleep=sleep)
+                if res.done and not res.error:
+                    dest = project.clips_dir / f"{sid}_t{len(st.takes) + 1}.mp4"
+                    with_retry(lambda: client.download(res.video, dest), sleep=sleep)
+            except Exception as exc:
+                if is_transient(exc):  # mạng/5xx: giữ op pending để lần chạy sau poll tiếp
+                    raise
+                # lỗi vĩnh viễn (op hết hạn, URI hết hạn...): bỏ op, chạy tiếp các op khác
+                res = PollResult(done=True, error=f"{type(exc).__name__}: {exc}")
             if not res.done:
                 continue
-            st = state.scene(sid)
             st.pending.remove(op)
             if res.error:
                 st.errors.append(f"{now()} {res.error}")
                 report.failed[sid] = res.error
             else:
-                dest = project.clips_dir / f"{sid}_t{len(st.takes) + 1}.mp4"
-                with_retry(lambda: client.download(res.video, dest), sleep=sleep)
                 cost = round(op.seconds * cfg.veo_price_per_second, 4)
                 st.takes.append(Take(file=project.rel(dest), input_hash=op.input_hash, cost_usd=cost,
                                      created_at=now()))
                 state.spent_usd = round(state.spent_usd + cost, 4)
-                if st.picked is None or st.takes[st.picked].input_hash != op.input_hash:
+                if st.picked is None or op.input_hash == current_hash[sid]:
                     st.picked = len(st.takes) - 1
                 report.created.append(project.rel(dest))
             project.save_state(state)
