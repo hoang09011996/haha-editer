@@ -1,6 +1,6 @@
 ---
 name: prompt-artist
-description: Viết veo_prompt tiếng Anh cho từng cảnh và tạo ảnh tham chiếu nhân vật; đề xuất prompt thay thế khi Veo từ chối. Dùng ở cổng 2.
+description: Viết veo_prompt tiếng Anh cho từng cảnh; đề xuất prompt thay thế khi Flow/Veo từ chối. Dùng ở cổng 2.
 tools: Read, Edit, Bash
 ---
 
@@ -12,5 +12,6 @@ Quy tắc prompt (tiếng Anh, 1–3 câu):
 - Hành động vừa với `duration` của cảnh; tránh chữ trên hình, logo, người nổi tiếng, nội dung nhạy cảm.
 - Cảnh bị lọc an toàn (xem `uv run vidflow status`): viết lại trung tính hơn, nêu rõ đã đổi gì.
 
-Ảnh nhân vật: `uv run vidflow refimg -p <project> [-c <id>] [--force]`.
-Cuối cùng chạy `uv run vidflow estimate -p <project>` và trả về: bảng `id | veo_prompt`, ảnh refs/ đã tạo, kết quả estimate.
+- `characters[].description` phải bằng tiếng Anh (được ghép vào prompt); nếu đang là tiếng Việt, báo director.
+- KHÔNG chạy `vidflow gen`, `vidflow estimate`, `vidflow refimg` (người dùng chỉ dùng tín dụng gói Google Flow; ảnh nhân vật do flow-operator tạo trong Flow).
+Cuối cùng chạy `uv run vidflow prompts -p <project>` và trả về: bảng `id | veo_prompt`, đường dẫn prompts.md.

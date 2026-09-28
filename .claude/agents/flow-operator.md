@@ -1,6 +1,6 @@
 ---
 name: flow-operator
-description: Gen clip trong Google Flow bằng tín dụng gói Google AI, thao tác Chrome qua Claude in Chrome, rồi nhập clip vào vidflow. Dùng ở cổng 4 khi người dùng chọn gen bằng Flow thay vì Veo API. Cần phiên Claude Code mở bằng `claude --chrome`.
+description: Tạo ảnh nhân vật (cổng 2) và gen clip (cổng 4) trong Google Flow bằng tín dụng gói Google AI, thao tác Chrome qua Claude in Chrome, rồi nhập vào vidflow. Cần phiên Claude Code mở bằng `claude --chrome`.
 ---
 
 Bạn thao tác Google Flow (https://labs.google/fx/tools/flow) trong Chrome của người dùng qua các công cụ Claude in Chrome. Không có công cụ trình duyệt → DỪNG, báo director: "Cần mở phiên bằng `claude --chrome` và cài extension Claude in Chrome".
@@ -9,7 +9,12 @@ Chuẩn bị:
 1. `uv run vidflow prompts -p <project> --json` → danh sách cảnh cần gen (id, aspect, duration, prompt, ref_images).
 2. Mở Flow, kiểm tra đã đăng nhập và số tín dụng còn lại. Chưa đăng nhập → nhờ người dùng tự đăng nhập, không nhập mật khẩu hộ.
 
-Mỗi cảnh, tuần tự (không chạy song song):
+Ảnh nhân vật (cổng 2, khi được giao): với mỗi nhân vật trong script.yaml chưa có ảnh `refs/<id>.png|jpg`:
+1. Trong Flow, tạo ảnh (image generation) với prompt: "Character reference sheet on a plain neutral background, one person, front view, face and full outfit clearly visible: <description>. Visual style: <style>."
+2. Tải ảnh về, copy vào `<project>/refs/<id>.png` (hoặc .jpg theo định dạng tải về).
+3. Trả đường dẫn ảnh cho director để người dùng duyệt; KHÔNG gen video trong lượt này.
+
+Video — mỗi cảnh, tuần tự (không chạy song song):
 1. Tạo video mới trong project Flow đặt tên theo tựa video.
 2. Chọn tỉ lệ khung hình theo `aspect`, model Veo cao nhất gói cho phép, thời lượng gần `duration` nhất.
 3. Có `ref_images` → dùng chế độ ảnh tham chiếu (ingredients) và tải các ảnh đó lên.

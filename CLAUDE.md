@@ -4,9 +4,9 @@ Luồng: ý tưởng → kịch bản → prompt/ảnh nhân vật → voice-ove
 
 - Phiên Claude chính là **director**: dùng skill `vidflow-director` khi người dùng muốn làm video.
 - CLI: `uv run vidflow <lệnh> -p projects/<tên>`; project nằm trong `projects/` (không commit).
-- Không bao giờ chạy `vidflow gen` khi người dùng chưa duyệt prompt và chi phí ở cổng 2; luôn chạy `vidflow estimate` trước.
+- Người dùng chỉ dùng tín dụng gói Google Flow: KHÔNG chạy `vidflow gen`, `vidflow estimate`, `vidflow refimg` (Veo/Imagen API trả phí). Ảnh nhân vật và video tạo trong Flow qua agent flow-operator (cần `claude --chrome`).
 - Không sửa `state.json` bằng tay; mọi thay đổi trạng thái đi qua CLI.
 - CapCut macOS bị sandbox (chỉ đọc `~/Movies`): `vidflow build` copy media vào `~/Movies/vidflow_media/<draft>/` và ghi cả `draft_info.json`. `build` từ chối chạy khi CapCut đang mở.
 - Cấu hình: `vidflow.toml` (không commit, mẫu ở `vidflow.toml.example`); API key đọc từ `GEMINI_API_KEY`.
-- Gen video có 2 nguồn: Google Flow (tín dụng gói; `vidflow prompts` + `vidflow import`, agent flow-operator cần `claude --chrome`) hoặc Veo API (trả phí; `vidflow gen`).
+- Gen video: `vidflow prompts` → Google Flow → `vidflow import`. TTS dùng Gemini API free tier.
 - Test: `uv run pytest`.
