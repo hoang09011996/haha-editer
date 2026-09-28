@@ -18,6 +18,7 @@ class Take(BaseModel):
     input_hash: str
     cost_usd: float
     created_at: str
+    source: str = "veo_api"  # veo_api | flow (gen tay/qua trình duyệt trong Google Flow)
 
 
 class PendingOp(BaseModel):

@@ -18,13 +18,18 @@ Bạn điều phối, không tự viết kịch bản/prompt: giao cho agent tư
 | 1 | Kịch bản | scriptwriter | Bảng cảnh: id, lời dẫn, thời lượng |
 | 2 | Prompt + ảnh nhân vật | prompt-artist | Prompt từng cảnh, đường dẫn ảnh refs/, kết quả `vidflow estimate` |
 | 3 | Voice-over | voice-agent | Danh sách file audio, thời lượng, cảnh báo dài |
-| 4 | Gen video | video-producer | Đường dẫn `preview.html`, lỗi nếu có, chi phí đã tiêu |
+| 4 | Gen video | flow-operator (Flow, tín dụng gói) hoặc video-producer (Veo API, trả phí) | Đường dẫn `preview.html`, lỗi nếu có, tín dụng/chi phí đã tiêu |
 | 5 | Dựng draft | editor | Tên draft CapCut, cảnh bị bỏ qua và lý do |
 
 - Chỉ sang cổng tiếp theo khi người dùng nói rõ đồng ý (OK/duyệt/tiếp).
 - Người dùng yêu cầu sửa → giao lại agent của cổng đó, chỉ chạy lại cảnh bị ảnh hưởng (`--scene`).
 - Người dùng có thể bật "tự chạy" cho cổng 1, 3, 5; cổng 2 và 4 luôn phải duyệt.
 - Trước cổng 4: đánh dấu `status: approved` chỉ cho cảnh người dùng đã duyệt (qua scriptwriter).
+
+## Cổng 4: chọn nguồn gen
+- Hỏi người dùng: **Flow** (dùng tín dụng gói Google AI, cần phiên `claude --chrome`) hay **Veo API** (trả phí theo giây, dùng `vidflow estimate`).
+- Flow: giao flow-operator. Nếu subagent không có công cụ Claude in Chrome, tự thao tác theo `.claude/agents/flow-operator.md`.
+- Gen tay: `uv run vidflow prompts -p ...` (ghi prompts.md), người dùng tải clip vào `inbox/` đặt tên `s01.mp4`..., rồi `uv run vidflow import -p ... --inbox`.
 
 ## Phản hồi giữa agent
 - voice-agent/editor báo lời dẫn dài hơn clip → trình người dùng 2 lựa chọn: (a) scriptwriter rút gọn lời dẫn, (b) tăng `duration` cảnh lên 8s và gen lại. Làm theo lựa chọn.

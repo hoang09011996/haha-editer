@@ -23,3 +23,11 @@ def test_validate_error_is_clean(tmp_path):
     assert r.exit_code == 1
     assert "không hợp lệ" in r.output
     assert "Traceback" not in r.output
+
+
+def test_import_command_name_and_usage_error(tmp_path):
+    root = tmp_path / "p3"
+    runner.invoke(app, ["new", str(root), "--title", "X"])
+    r = runner.invoke(app, ["import", "-p", str(root)])
+    assert r.exit_code == 1
+    assert "vidflow import" in r.output

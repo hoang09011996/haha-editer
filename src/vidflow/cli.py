@@ -17,16 +17,19 @@ ScenesOpt = Annotated[Optional[list[str]], typer.Option("--scene", "-s", help="C
 ConfigOpt = Annotated[Optional[Path], typer.Option("--config", help="Đường dẫn vidflow.toml")]
 
 
-def command(fn):
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except VidflowError as e:
-            typer.secho(str(e), fg=typer.colors.RED, err=True)
-            raise typer.Exit(1)
+def command(fn=None, *, name: str | None = None):
+    def register(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except VidflowError as e:
+                typer.secho(str(e), fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
 
-    return app.command()(wrapper)
+        return app.command(name)(wrapper)
+
+    return register(fn) if fn else register
 
 
 @command
@@ -177,3 +180,45 @@ def build(project: ProjectOpt, config: ConfigOpt = None):
         typer.secho(f"  bỏ qua {sid}: {why}", fg=typer.colors.YELLOW)
     path = build_draft(p, cfg, script, tl)
     typer.echo(f"Đã dựng {len(tl.scenes)} cảnh, {tl.total:.1f}s → {path}. Mở CapCut để xem.")
+
+
+@command
+def prompts(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json", help="In JSON cho agent")] = False,
+            config: ConfigOpt = None):
+    """Xuất prompt các cảnh cần gen để làm trong Google Flow (ghi prompts.md)."""
+    import json
+
+    from vidflow.manual import pending_prompts, write_prompts_md
+
+    p = Project.open(project)
+    items = pending_prompts(p, load_config(config))
+    out = write_prompts_md(p, items)
+    if json_out:
+        typer.echo(json.dumps(items, ensure_ascii=False, indent=2))
+    else:
+        for i in items:
+            typer.echo(f"  {i['id']} · {i['aspect']} · {i['duration']}s · {len(i['ref_images'])} ảnh tham chiếu")
+        typer.echo(f"{len(items)} cảnh cần gen · chi tiết: {out}")
+
+
+@command(name="import")
+def import_(project: ProjectOpt,
+            scene_id: Annotated[Optional[str], typer.Argument(help="Cảnh nhận clip")] = None,
+            file: Annotated[Optional[Path], typer.Argument(help="File video đã tải từ Flow")] = None,
+            inbox: Annotated[bool, typer.Option("--inbox", help="Nhập mọi file <scene>*.mp4 trong inbox/")] = False,
+            config: ConfigOpt = None):
+    """Nhập clip gen ngoài API (Google Flow) làm take của cảnh."""
+    from vidflow.manual import import_clip, import_inbox
+
+    p = Project.open(project)
+    cfg = load_config(config)
+    if inbox:
+        imported, unmatched = import_inbox(p, cfg)
+        for name, rel in imported.items():
+            typer.echo(f"  ✓ {name} → {rel}")
+        for name in unmatched:
+            typer.secho(f"  ? {name}: tên file không bắt đầu bằng id cảnh", fg=typer.colors.YELLOW)
+        return
+    if not scene_id or not file:
+        raise VidflowError("Dùng: vidflow import -p <project> <scene> <file.mp4>  hoặc  --inbox")
+    typer.echo(f"  ✓ {scene_id} ← {import_clip(p, cfg, scene_id, file)}")

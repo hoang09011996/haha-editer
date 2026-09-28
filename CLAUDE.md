@@ -8,4 +8,5 @@ Luồng: ý tưởng → kịch bản → prompt/ảnh nhân vật → voice-ove
 - Không sửa `state.json` bằng tay; mọi thay đổi trạng thái đi qua CLI.
 - CapCut macOS bị sandbox (chỉ đọc `~/Movies`): `vidflow build` copy media vào `~/Movies/vidflow_media/<draft>/` và ghi cả `draft_info.json`. `build` từ chối chạy khi CapCut đang mở.
 - Cấu hình: `vidflow.toml` (không commit, mẫu ở `vidflow.toml.example`); API key đọc từ `GEMINI_API_KEY`.
+- Gen video có 2 nguồn: Google Flow (tín dụng gói; `vidflow prompts` + `vidflow import`, agent flow-operator cần `claude --chrome`) hoặc Veo API (trả phí; `vidflow gen`).
 - Test: `uv run pytest`.
