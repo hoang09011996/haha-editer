@@ -35,3 +35,7 @@ def test_probe_duration(tmp_path):
 def test_probe_missing_file(tmp_path):
     with pytest.raises(VidflowError, match="ffprobe"):
         probe_duration(tmp_path / "none.mp4")
+
+
+def test_floor_ms_keeps_exact_milliseconds():
+    assert all(floor_ms(x / 1000) == x / 1000 for x in range(0, 20000))

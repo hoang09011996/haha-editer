@@ -28,7 +28,7 @@ def wav_duration(path: Path) -> float:
 
 
 def floor_ms(x: float) -> float:
-    return math.floor(x * 1000) / 1000
+    return math.floor(round(x * 1000, 6)) / 1000
 
 
 def probe_duration(path: Path) -> float:
