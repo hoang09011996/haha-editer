@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import base64
 import os
+from pathlib import Path
 
 from vidflow.errors import ConfigError
+from vidflow.video import PollResult
 
 
 def gemini_client():
@@ -30,3 +32,39 @@ class GeminiSpeechClient:
             generation_config={"speech_config": [{"voice": voice}]},
         )
         return base64.b64decode(it.output_audio.data)
+
+
+class GeminiVideoClient:
+    def __init__(self, client=None):
+        self._c = client or gemini_client()
+
+    def submit(self, *, prompt, aspect, duration, resolution, model, ref_images: list[Path]) -> str:
+        from google.genai import types
+
+        refs = [types.VideoGenerationReferenceImage(image=types.Image.from_file(location=str(p)),
+                                                    reference_type="asset") for p in ref_images]
+        op = self._c.models.generate_videos(
+            model=model,
+            prompt=prompt,
+            config=types.GenerateVideosConfig(aspect_ratio=aspect, duration_seconds=duration,
+                                              resolution=resolution, reference_images=refs or None),
+        )
+        return op.name
+
+    def poll(self, op_name: str) -> PollResult:
+        from google.genai import types
+
+        op = self._c.operations.get(types.GenerateVideosOperation(name=op_name))
+        if not op.done:
+            return PollResult(done=False)
+        if op.error:
+            return PollResult(done=True, error=f"Veo lỗi: {op.error}")
+        vids = (op.response.generated_videos if op.response else None) or []
+        if not vids:
+            reasons = getattr(op.response, "rai_media_filtered_reasons", None)
+            return PollResult(done=True, error=f"Veo không trả video (có thể bị lọc an toàn): {reasons}")
+        return PollResult(done=True, video=vids[0].video)
+
+    def download(self, video, dest: Path) -> None:
+        self._c.files.download(file=video)
+        video.save(str(dest))

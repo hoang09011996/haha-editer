@@ -87,3 +87,36 @@ def tts(project: ProjectOpt, scene: ScenesOpt = None, force: ForceOpt = False, c
         warn = f"  ⚠ dài hơn clip {s.duration}s có thể kéo (tối đa {s.duration / MIN_CLIP_SPEED:.1f}s)" \
             if need > s.duration / MIN_CLIP_SPEED else ""
         typer.echo(f"  {s.id} [{mark}] {t.tts.file} {t.tts.duration_s:.2f}s{warn}")
+
+
+@command
+def gen(project: ProjectOpt, scene: ScenesOpt = None, takes: TakesOpt = 1, force: ForceOpt = False,
+        yes: Annotated[bool, typer.Option("--yes", help="Không hỏi xác nhận chi phí")] = False,
+        config: ConfigOpt = None):
+    """Gen clip Veo cho các cảnh approved (hỏi xác nhận chi phí trước)."""
+    from vidflow.cost import check_budget, plan_gen
+    from vidflow.gemini import GeminiVideoClient
+    from vidflow.video import run_gen
+
+    p = Project.open(project)
+    cfg = load_config(config)
+    script, state = p.load_script(), p.load_state()
+    est = plan_gen(p, script, state, cfg, scene_ids=scene, takes=takes, force=force)
+    check_budget(script, state, est)
+    typer.echo(f"Sẽ gen {len(est.jobs)} clip, {est.seconds}s ≈ {est.usd:.2f} USD")
+    if est.jobs and not yes and not typer.confirm("Tiếp tục?"):
+        raise typer.Exit(0)
+    rep = run_gen(p, cfg, GeminiVideoClient(), scene_ids=scene, takes=takes, force=force)
+    for f in rep.created:
+        typer.echo(f"  ✓ {f}")
+    for sid, err in rep.failed.items():
+        typer.secho(f"  ✗ {sid}: {err}", fg=typer.colors.YELLOW)
+    typer.echo(f"Đã tiêu: {p.load_state().spent_usd:.2f}/{script.budget_usd:.2f} USD")
+
+
+@command
+def pick(project: ProjectOpt, scene_id: Annotated[str, typer.Argument()], take: Annotated[int, typer.Argument()]):
+    """Chọn take (đánh số từ 1) dùng cho cảnh."""
+    from vidflow.video import pick_take
+
+    typer.echo(f"{scene_id} dùng {pick_take(Project.open(project), scene_id, take)}")
