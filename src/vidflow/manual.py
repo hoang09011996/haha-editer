@@ -29,6 +29,7 @@ def pending_prompts(project: Project, cfg: Config) -> list[dict]:
         items.append({
             "id": scene.id, "aspect": script.aspect, "duration": scene.duration,
             "prompt": compose_veo_prompt(script, scene),
+            "prompt_vi": scene.veo_prompt_vi,
             "ref_images": [str(p) for p in scene_ref_images(project, script, scene)],
         })
     return items
@@ -38,6 +39,8 @@ def write_prompts_md(project: Project, items: list[dict]) -> Path:
     lines = ["# Prompt cho Google Flow", ""]
     for i in items:
         lines += [f"## {i['id']} · {i['aspect']} · {i['duration']}s", "", i["prompt"], ""]
+        if i.get("prompt_vi"):
+            lines.append(f"- Bản dịch (chỉ để đọc, không dán vào Flow): {i['prompt_vi']}")
         lines += [f"- Ảnh tham chiếu: {r}" for r in i["ref_images"]]
         lines += [f"- Tải về rồi: `uv run vidflow import -p {project.root} {i['id']} <file.mp4>`", ""]
     out = project.root / "prompts.md"

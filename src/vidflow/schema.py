@@ -35,6 +35,7 @@ class Scene(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9_]+$")
     narration: str = ""
     veo_prompt: str = ""
+    veo_prompt_vi: str = ""  # bản dịch tiếng Việt để người dùng duyệt; không gửi cho Veo
     characters: list[str] = []
     duration: Literal[4, 6, 8] = 8
     veo_audio: bool = False

@@ -80,3 +80,15 @@ def test_import_inbox_prefers_longest_scene_id(project, cfg):
     make_mp4(project.root / "inbox" / "s01b_x.mp4", 1)
     imported, _ = import_inbox(project, cfg, now=lambda: "T")
     assert imported == {"s01b_x.mp4": "clips/s01b_t1.mp4"}
+
+
+def test_prompts_md_shows_vietnamese_translation(project, cfg):
+    text = project.script_path.read_text(encoding="utf-8").replace(
+        '    veo_prompt: "Close-up of a young woman sipping coffee."',
+        '    veo_prompt: "Close-up of a young woman sipping coffee."\n    veo_prompt_vi: "Cận cảnh cô gái nhấp cà phê."')
+    project.script_path.write_text(text, encoding="utf-8")
+    items = pending_prompts(project, cfg)
+    assert items[0]["prompt_vi"] == "Cận cảnh cô gái nhấp cà phê."
+    assert "Cận cảnh cô gái" not in items[0]["prompt"]
+    md = write_prompts_md(project, items).read_text(encoding="utf-8")
+    assert "- Bản dịch (chỉ để đọc, không dán vào Flow): Cận cảnh cô gái nhấp cà phê." in md
