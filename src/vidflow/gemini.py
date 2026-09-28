@@ -5,7 +5,7 @@ import base64
 import os
 from pathlib import Path
 
-from vidflow.errors import ConfigError
+from vidflow.errors import ConfigError, VidflowError
 from vidflow.video import PollResult
 
 
@@ -68,3 +68,15 @@ class GeminiVideoClient:
     def download(self, video, dest: Path) -> None:
         self._c.files.download(file=video)
         video.save(str(dest))
+
+
+class GeminiImageClient:
+    def __init__(self, client=None):
+        self._c = client or gemini_client()
+
+    def generate(self, *, prompt: str, model: str) -> bytes:
+        resp = self._c.models.generate_content(model=model, contents=[prompt])
+        for part in resp.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                return part.inline_data.data
+        raise VidflowError("Model ảnh không trả về ảnh; thử lại hoặc đổi image_model.")

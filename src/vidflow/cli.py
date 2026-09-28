@@ -120,3 +120,19 @@ def pick(project: ProjectOpt, scene_id: Annotated[str, typer.Argument()], take: 
     from vidflow.video import pick_take
 
     typer.echo(f"{scene_id} dùng {pick_take(Project.open(project), scene_id, take)}")
+
+
+@command
+def refimg(project: ProjectOpt,
+           character: Annotated[Optional[list[str]], typer.Option("--character", "-c")] = None,
+           force: ForceOpt = False, config: ConfigOpt = None):
+    """Tạo ảnh tham chiếu nhân vật vào refs/."""
+    from vidflow.gemini import GeminiImageClient
+    from vidflow.refimg import run_refimg
+
+    p = Project.open(project)
+    for f in run_refimg(p, load_config(config), GeminiImageClient(), character_ids=character, force=force):
+        typer.echo(f"  ✓ {f}")
+    for c in p.load_script().characters:
+        if c.ref_image:
+            typer.echo(f"  {c.id}: đang dùng ảnh chỉ định {c.ref_image} (xóa ref_image để dùng ảnh trong refs/)")
