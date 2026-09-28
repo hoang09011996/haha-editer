@@ -1,0 +1,30 @@
+[project]
+name = "vidflow"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "typer>=0.12",
+  "pydantic>=2.7",
+  "pyyaml>=6",
+  "google-genai>=1.0",
+  "pycapcut @ git+https://github.com/GuanYixuan/pyCapCut@3e8209add858588e3a29216f5f8e76089559130b",
+]
+
+[project.scripts]
+vidflow = "vidflow.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vidflow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

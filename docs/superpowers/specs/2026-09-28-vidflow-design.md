@@ -171,3 +171,15 @@ scenes:
 2. **Veo 3.1 qua Gemini API** — xác nhận quota, đơn giá hiện hành, giới hạn thời lượng clip và hỗ trợ ảnh tham chiếu cho tài khoản của người dùng.
 3. **Gemini TTS tiếng Việt** — nghe thử chất lượng giọng trước khi chốt.
 4. **Nhất quán nhân vật** giữa các clip Veo không được đảm bảo tuyệt đối; giảm thiểu bằng mô tả cố định + ảnh tham chiếu.
+
+## 10. Kết quả spike (2026-09-28)
+
+- CapCut 9.5 macOS mở draft do pyCapCut tạo: **có** — hiển thị video (speed 0.9x), 2 track audio có tiếng, text tiếng Việt, canvas 9:16.
+- CapCut 9.5 macOS đọc/ghi **`draft_info.json`** (JSON rõ, không mã hóa), không dùng `draft_content.json`. vidflow ghi cả hai file cùng nội dung.
+- CapCut chạy trong **sandbox macOS**: chỉ đọc được `~/Movies` (entitlement `assets.movies.read-write`). Media nằm ngoài `~/Movies` báo "File not accessible". → `vidflow build` copy clip/voice/nhạc vào `~/Movies/vidflow_media/<tên draft>/` và draft trỏ tới đó.
+- pycapcut 0.0.3 trên PyPI thiếu `trange_seconds` → dùng bản GitHub commit `3e8209a`.
+- TTS: interactions API có trong google-genai 2.25.0; `gemini-3.8-flash-tts` trả WAV (`RIFF`). Chất lượng giọng tiếng Việt: chờ người dùng nghe `spikes/out/tts.wav`.
+- Model ảnh cho refimg: `gemini-3.1-flash-image` (có trong danh sách model của key).
+- Veo: có `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`; chưa gen thử (tốn phí, chưa được duyệt) — chữ ký `operations.get`/`files.download` xác minh ở E2E.
+- Credit Google Flow không dùng cho Gemini API; Veo qua API tính theo billing của API key.
+- Director: là phiên Claude chính (skill vidflow-director), vì subagent không gọi được subagent.

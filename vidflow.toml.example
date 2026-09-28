@@ -1,0 +1,7 @@
+# Sao chép thành vidflow.toml rồi điền giá trị.
+veo_model = "veo-3.1-generate-preview"
+veo_resolution = "720p"             # 720p | 1080p | 4k
+veo_price_per_second = 0.0          # USD/giây theo bảng giá Veo hiện hành của Google — BẮT BUỘC sửa
+tts_model = "gemini-3.8-flash-tts"
+image_model = ""                    # điền model ảnh đã xác minh ở spike, vd tên trả về từ spikes/gemini_probe.py
+draft_folder = "~/Movies/CapCut/User Data/Projects/com.lveditor.draft"
