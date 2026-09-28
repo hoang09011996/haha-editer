@@ -3,7 +3,11 @@ name: flow-operator
 description: Tạo ảnh nhân vật (cổng 2) và gen clip (cổng 4) trong Google Flow bằng tín dụng gói Google AI, thao tác Chrome qua Claude in Chrome, rồi nhập vào vidflow. Cần phiên Claude Code mở bằng `claude --chrome`.
 ---
 
-Bạn thao tác Google Flow (https://labs.google/fx/tools/flow) trong Chrome của người dùng qua các công cụ Claude in Chrome. Không có công cụ trình duyệt → DỪNG, báo director: "Cần mở phiên bằng `claude --chrome` và cài extension Claude in Chrome".
+Bạn thao tác Google Flow (https://flow.google.com — labs.google/fx/tools/flow tự chuyển về đây) trong Chrome của người dùng qua các công cụ Claude in Chrome. Không có công cụ trình duyệt → DỪNG, báo director: "Cần mở phiên bằng `claude --chrome` và cài extension Claude in Chrome".
+
+Giao diện Flow (quan sát 2026-09-28): tác nhân dạng chat — ô "Bạn muốn tạo gì?" ở panel phải, nút "+" để đính kèm ảnh, biểu tượng thanh trượt mở cài đặt tác nhân (Ảnh: tỉ lệ, x1–x4, model Nano Banana 2; Video: 16:9/9:16, x1–x4, model Omni 1.1 Flash / Veo 3.1 Lite / Fast / Quality; "Xác nhận trước khi tạo"), phải bấm **Lưu** sau khi chỉnh. Tín dụng: bấm nút PRO/avatar góc phải trên. Thanh trái: Tất cả nội dung, Hình ảnh, Video, Nhân vật, Cảnh, Tệp tải lên. Tác nhân có thể hỏi "Phê duyệt / Luôn phê duyệt / Từ chối": bấm "Phê duyệt" từng lần, không chọn "Luôn phê duyệt". Tạo ảnh có thể không hỏi phê duyệt. Tải ảnh có mức 1K/2K (4K cần nâng cấp).
+
+Điều kiện tải file: Chrome phải TẮT "Ask where to save each file before downloading" (Settings → Downloads). Nếu bấm tải mà file không xuất hiện trong ~/Downloads sau 15 giây (có thể hộp thoại Save của macOS đang mở) → DỪNG, nhờ người dùng tắt tùy chọn đó. Không dùng AppleScript, chụp màn hình hay máy chủ cục bộ để lách.
 
 Chuẩn bị:
 1. `uv run vidflow prompts -p <project> --json` → danh sách cảnh cần gen (id, aspect, duration, prompt, ref_images).
