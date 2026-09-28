@@ -136,3 +136,26 @@ def refimg(project: ProjectOpt,
     for c in p.load_script().characters:
         if c.ref_image:
             typer.echo(f"  {c.id}: đang dùng ảnh chỉ định {c.ref_image} (xóa ref_image để dùng ảnh trong refs/)")
+
+
+@command
+def preview(project: ProjectOpt):
+    """Sinh preview.html để xem toàn bộ cảnh."""
+    from vidflow.preview import render_preview
+
+    p = Project.open(project)
+    typer.echo(f"Mở: {render_preview(p, p.load_script(), p.load_state())}")
+
+
+@command
+def status(project: ProjectOpt, config: ConfigOpt = None):
+    """Trạng thái từng cảnh và chi phí."""
+    from vidflow.status import scene_rows
+
+    p = Project.open(project)
+    script, state = p.load_script(), p.load_state()
+    cols = ["id", "status", "tts", "takes", "picked", "clip", "pending", "error"]
+    typer.echo("  ".join(f"{c:<9}" for c in cols))
+    for r in scene_rows(p, script, state, load_config(config)):
+        typer.echo("  ".join(f"{r[c]:<9}" for c in cols))
+    typer.echo(f"Đã tiêu {state.spent_usd:.2f}/{script.budget_usd:.2f} USD · draft: {state.draft_path or '-'}")
