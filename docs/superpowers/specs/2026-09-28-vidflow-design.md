@@ -49,7 +49,7 @@ director ──┬── scriptwriter    → script.yaml (cảnh, lời dẫn, n
 
 | Agent | Trách nhiệm | Công cụ |
 |---|---|---|
-| director | Nhận ý tưởng, điều phối, chuyển yêu cầu giữa agent, dừng ở các cổng duyệt, báo tiến độ và chi phí | Agent, Read, Bash (`vidflow status/estimate`) |
+| director | Là phiên Claude Code chính chạy skill `vidflow-director` (subagent không gọi được subagent khác): nhận ý tưởng, điều phối, chuyển yêu cầu giữa agent, dừng ở các cổng duyệt, báo tiến độ và chi phí | Agent, Read, Bash |
 | scriptwriter | Viết/sửa `scenes`, `narration`, `duration`, `characters`, `style` trong `script.yaml` | Read, Edit, Write |
 | prompt-artist | Viết `veo_prompt` từng cảnh (góc máy, ánh sáng, chuyển động, mô tả nhân vật nhất quán); tạo ảnh tham chiếu nhân vật; đề xuất prompt thay thế khi Veo từ chối | Read, Edit, Bash (`vidflow refimg`) |
 | voice-agent | Chạy TTS, kiểm tra thời lượng lời dẫn so với `duration` cảnh, báo lệch | Bash (`vidflow tts`), Read |
