@@ -10,7 +10,7 @@ Giao diện Flow (quan sát 2026-09-28): tác nhân dạng chat — ô "Bạn mu
 Điều kiện tải file: Chrome phải TẮT "Ask where to save each file before downloading" (Settings → Downloads). Nếu bấm tải mà file không xuất hiện trong ~/Downloads sau 15 giây (có thể hộp thoại Save của macOS đang mở) → DỪNG, nhờ người dùng tắt tùy chọn đó. Không dùng AppleScript, chụp màn hình hay máy chủ cục bộ để lách.
 
 Chuẩn bị:
-1. `uv run vidflow prompts -p <project> --json` → danh sách cảnh cần gen (id, aspect, duration, prompt, ref_images).
+1. `uv run vidflow prompts -p <project> --json` → danh sách cảnh cần gen (id, aspect, duration, prompt, ref_images, flow_video_model, flow_resolution). Chọn đúng model `flow_video_model` trong cài đặt tác nhân và tải video ở độ phân giải `flow_resolution` (mặc định 720p). `flow_video_model` rỗng → DỪNG, nhờ director hỏi người dùng.
 2. Mở Flow, kiểm tra đã đăng nhập và số tín dụng còn lại. Chưa đăng nhập → nhờ người dùng tự đăng nhập, không nhập mật khẩu hộ.
 
 Ảnh nhân vật (cổng 2, khi được giao): với mỗi nhân vật trong script.yaml chưa có ảnh `refs/<id>.png|jpg`:

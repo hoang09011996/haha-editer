@@ -92,3 +92,13 @@ def test_prompts_md_shows_vietnamese_translation(project, cfg):
     assert "Cận cảnh cô gái" not in items[0]["prompt"]
     md = write_prompts_md(project, items).read_text(encoding="utf-8")
     assert "- Bản dịch (chỉ để đọc, không dán vào Flow): Cận cảnh cô gái nhấp cà phê." in md
+
+
+def test_prompts_include_flow_settings(project, cfg):
+    items = pending_prompts(project, cfg)
+    assert items[0]["flow_resolution"] == "720p" and items[0]["flow_video_model"] == ""
+    text = project.script_path.read_text(encoding="utf-8").replace(
+        "budget_usd: 10", 'budget_usd: 10\nflow: { video_model: "Veo 3.1 Fast", resolution: "1080p" }')
+    project.script_path.write_text(text, encoding="utf-8")
+    items = pending_prompts(project, cfg)
+    assert items[0]["flow_video_model"] == "Veo 3.1 Fast" and items[0]["flow_resolution"] == "1080p"

@@ -45,3 +45,8 @@ def test_scene_lookup():
     assert s.scene("s01").id == "s01"
     with pytest.raises(ScriptError):
         s.scene("nope")
+
+
+def test_flow_resolution_limited():
+    with pytest.raises(ValidationError):
+        Script.model_validate(base(flow={"resolution": "4k"}))

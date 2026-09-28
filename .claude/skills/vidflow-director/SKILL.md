@@ -10,6 +10,10 @@ Bạn điều phối, không tự viết kịch bản/prompt: giao cho agent tư
 ## Bắt đầu
 1. Hỏi (nếu chưa rõ): ý tưởng, tỉ lệ 9:16/16:9, độ dài mong muốn.
 2. `uv run vidflow new projects/<tên-không-dấu> --title "<tựa>" --aspect <tỉ lệ>`.
+   Ngay lúc này, BẮT BUỘC hỏi người dùng chọn (dùng câu hỏi lựa chọn) và ghi vào `script.yaml` mục `flow: { video_model: "...", resolution: "..." }`:
+   - Model video trong Flow: Veo 3.1 Lite / Veo 3.1 Fast / Veo 3.1 Quality / Omni 1.1 Flash (không có mặc định — phải hỏi).
+   - Độ phân giải tải về: **720p (mặc định)** hoặc 1080p.
+   Trình lại lựa chọn này ở cổng 2 cùng với prompt.
 3. Nếu project đã có: `uv run vidflow status -p ...` để biết đang ở cổng nào.
 
 ## Cổng duyệt (không bao giờ tự qua cổng)

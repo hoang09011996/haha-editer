@@ -31,6 +31,12 @@ class Subtitles(BaseModel):
     max_chars_per_line: int = Field(32, ge=8)
 
 
+class FlowSettings(BaseModel):
+    """Cài đặt khi gen trong Google Flow; người dùng chọn ở cổng duyệt đầu tiên."""
+    video_model: str = ""  # tên model trong Flow, vd "Veo 3.1 Fast"; rỗng = chưa chọn
+    resolution: Literal["720p", "1080p"] = "720p"
+
+
 class Scene(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9_]+$")
     narration: str = ""
@@ -51,6 +57,7 @@ class Script(BaseModel):
     music: Music | None = None
     subtitles: Subtitles = Subtitles()
     budget_usd: float = Field(20, gt=0)
+    flow: FlowSettings = FlowSettings()
     scenes: list[Scene] = []
 
     @model_validator(mode="after")

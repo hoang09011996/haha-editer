@@ -30,6 +30,8 @@ def pending_prompts(project: Project, cfg: Config) -> list[dict]:
             "id": scene.id, "aspect": script.aspect, "duration": scene.duration,
             "prompt": compose_veo_prompt(script, scene),
             "prompt_vi": scene.veo_prompt_vi,
+            "flow_video_model": script.flow.video_model,
+            "flow_resolution": script.flow.resolution,
             "ref_images": [str(p) for p in scene_ref_images(project, script, scene)],
         })
     return items
