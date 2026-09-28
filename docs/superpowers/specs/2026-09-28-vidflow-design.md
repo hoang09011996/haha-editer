@@ -144,7 +144,7 @@ scenes:
 
 ## 6. Dựng draft CapCut
 
-- Track video: clip đã chọn của từng cảnh theo thứ tự; cắt/kéo dài theo `max(duration clip, duration lời dẫn)` theo quy tắc: lời dẫn dài hơn clip → giảm tốc độ clip tối đa 0.8x, vẫn thiếu thì báo editor.
+- Track video: clip đã chọn của từng cảnh theo thứ tự. Độ dài cảnh = độ dài lời dẫn + 0.3s đệm. Clip dài hơn → cắt bớt cuối; clip ngắn hơn → giảm tốc độ tối đa 0.8x; vẫn thiếu → không dựng cảnh đó, báo director để người dùng chọn cách xử lý.
 - Track audio 1: voice-over đặt đầu mỗi cảnh.
 - Track audio 2: nhạc nền, lặp/cắt theo tổng thời lượng, âm lượng theo `music.volume`.
 - Track text: phụ đề từ `narration`, chia dòng theo `max_chars_per_line`, phân bổ thời gian theo tỉ lệ số ký tự trong câu.
