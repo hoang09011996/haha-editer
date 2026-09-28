@@ -6,6 +6,7 @@ from typing import Annotated, Optional
 
 import typer
 
+from vidflow.config import load_config
 from vidflow.errors import VidflowError
 from vidflow.project import Project, create_project
 
@@ -45,3 +46,23 @@ def validate(project: ProjectOpt):
     script = Project.open(project).load_script()
     approved = sum(1 for s in script.scenes if s.status == "approved")
     typer.echo(f"OK: {len(script.scenes)} cảnh ({approved} approved), tỉ lệ {script.aspect}")
+
+
+TakesOpt = Annotated[int, typer.Option("--takes", help="Số bản gen mỗi cảnh")]
+ForceOpt = Annotated[bool, typer.Option("--force", help="Chạy lại dù đã có kết quả")]
+
+
+@command
+def estimate(project: ProjectOpt, scene: ScenesOpt = None, takes: TakesOpt = 1, force: ForceOpt = False,
+             config: ConfigOpt = None):
+    """Ước tính số giây và chi phí Veo."""
+    from vidflow.cost import plan_gen
+
+    p = Project.open(project)
+    script, state = p.load_script(), p.load_state()
+    est = plan_gen(p, script, state, load_config(config), scene_ids=scene, takes=takes, force=force)
+    for j in est.jobs:
+        typer.echo(f"  gen {j.scene_id}: {j.seconds}s")
+    for sid, why in est.skipped.items():
+        typer.echo(f"  bỏ qua {sid}: {why}")
+    typer.echo(f"Tổng: {est.seconds}s ≈ {est.usd:.2f} USD · đã tiêu {state.spent_usd:.2f}/{script.budget_usd:.2f} USD")
