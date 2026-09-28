@@ -159,3 +159,21 @@ def status(project: ProjectOpt, config: ConfigOpt = None):
     for r in scene_rows(p, script, state, load_config(config)):
         typer.echo("  ".join(f"{r[c]:<9}" for c in cols))
     typer.echo(f"Đã tiêu {state.spent_usd:.2f}/{script.budget_usd:.2f} USD · draft: {state.draft_path or '-'}")
+
+
+@command
+def build(project: ProjectOpt, config: ConfigOpt = None):
+    """Dựng draft CapCut Desktop từ clip đã chọn, voice-over, phụ đề, nhạc."""
+    from vidflow.capcut_draft import build_draft
+    from vidflow.media import probe_duration
+    from vidflow.timeline import plan_timeline
+
+    p = Project.open(project)
+    cfg = load_config(config)
+    script, state = p.load_script(), p.load_state()
+    clips = {st.takes[st.picked].file for st in state.scenes.values() if st.picked is not None}
+    tl = plan_timeline(script, state, {c: probe_duration(p.path(c)) for c in clips})
+    for sid, why in tl.skipped.items():
+        typer.secho(f"  bỏ qua {sid}: {why}", fg=typer.colors.YELLOW)
+    path = build_draft(p, cfg, script, tl)
+    typer.echo(f"Đã dựng {len(tl.scenes)} cảnh, {tl.total:.1f}s → {path}. Mở CapCut để xem.")
