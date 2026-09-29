@@ -16,6 +16,7 @@ from vidflow.project import Project, create_project
 from vidflow.schema import FlowSettings, Script
 from vidflow.status import scene_rows
 from vidflow.ui.jobs import KINDS, JobRunner
+from vidflow.ui.suggest import Suggester
 
 STATIC = Path(__file__).parent / "static"
 MEDIA_DIRS = ("audio", "clips", "refs", "music", "inbox")
@@ -34,6 +35,15 @@ class NewProject(BaseModel):
 class JobRequest(BaseModel):
     kind: str
     scenes: list[str] | None = None
+    instruction: str = ""
+
+
+class SuggestRequest(BaseModel):
+    field: str
+    label: str
+    current: str = ""
+    project: str | None = None
+    scene_id: str | None = None
 
 
 class PickRequest(BaseModel):
@@ -41,10 +51,12 @@ class PickRequest(BaseModel):
     take: int
 
 
-def create_app(projects_root: Path, runner: JobRunner | None = None, config_path: Path | None = None) -> FastAPI:
+def create_app(projects_root: Path, runner: JobRunner | None = None, config_path: Path | None = None,
+               suggester: Suggester | None = None) -> FastAPI:
     projects_root = Path(projects_root).resolve()
     projects_root.mkdir(parents=True, exist_ok=True)
     runner = runner or JobRunner()
+    suggester = suggester or Suggester()
     app = FastAPI(title="vidflow")
 
     def open_project(name: str) -> Project:
@@ -140,10 +152,31 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
         if req.kind not in KINDS:
             raise HTTPException(422, f"Việc không hỗ trợ: {req.kind}")
         try:
-            job = runner.start(req.kind, name, p.root, req.scenes)
+            job = runner.start(req.kind, name, p.root, req.scenes, req.instruction)
         except RuntimeError as e:
             raise HTTPException(409, str(e))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
         return job.to_dict(tail=0)
+
+    @app.post("/api/suggest")
+    def suggest(req: SuggestRequest):
+        context: dict = {}
+        if req.project:
+            script = load(open_project(req.project))
+            context = {"title": script.title, "profile": script.profile.model_dump(), "aspect": script.aspect,
+                       "characters": [c.model_dump(exclude={"description", "ref_image"}) for c in script.characters],
+                       "locations": [l.model_dump() for l in script.locations],
+                       "scenes": [{"id": s.id, "purpose": s.purpose, "narration": s.narration, "action": s.action,
+                                   "duration": s.duration} for s in script.scenes]}
+            if req.scene_id:
+                sc = next((s for s in script.scenes if s.id == req.scene_id), None)
+                if sc:
+                    context["current_scene"] = sc.model_dump(exclude={"veo_prompt", "veo_prompt_vi", "prompt_fields_hash"})
+        try:
+            return {"suggestions": suggester.suggest(req.label, req.field, req.current, context)}
+        except Exception as e:  # LLM lỗi / trả sai định dạng
+            raise HTTPException(502, f"AI gợi ý lỗi: {e}")
 
     @app.get("/api/jobs/current")
     def current_job():

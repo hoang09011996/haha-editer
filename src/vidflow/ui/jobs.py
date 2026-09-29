@@ -12,7 +12,7 @@ REPO = Path(__file__).resolve().parents[3]
 AGENTS = REPO / ".claude" / "agents"
 
 CLI_KINDS = {"tts": "tts", "export_prompts": "prompts", "build": "build"}
-CLAUDE_KINDS = ("script", "prompts", "refimg", "flow")
+CLAUDE_KINDS = ("script", "prompts", "refimg", "flow", "assist")
 KINDS = tuple(CLI_KINDS) + CLAUDE_KINDS
 
 LABELS = {
@@ -23,10 +23,11 @@ LABELS = {
     "tts": "Tạo voice-over",
     "export_prompts": "Xuất prompts.md",
     "build": "Dựng draft CapCut",
+    "assist": "AI sửa theo yêu cầu",
 }
 
 
-def _claude_task(kind: str, project_root: Path, scenes: list[str] | None) -> str:
+def _claude_task(kind: str, project_root: Path, scenes: list[str] | None, instruction: str = "") -> str:
     rel = project_root
     only = f" Chỉ xử lý các cảnh: {', '.join(scenes)}." if scenes else ""
     common = (f"Thư mục làm việc: {REPO}. Project vidflow: {rel}. Mọi lệnh CLI chạy dạng "
@@ -50,10 +51,17 @@ def _claude_task(kind: str, project_root: Path, scenes: list[str] | None) -> str
         return (f"Bạn là flow-operator. Đọc và tuân thủ {AGENTS / 'flow-operator.md'}. {common} "
                 "Gen video trong Google Flow cho các cảnh `uv run vidflow prompts -p ... --json` liệt kê, tải về, "
                 f"import từng cảnh, rồi chạy `uv run vidflow preview -p {rel}`.{only}")
+    if kind == "assist":
+        if not instruction.strip():
+            raise ValueError("Cần nội dung yêu cầu cho AI")
+        return (f"Bạn là biên kịch + đạo diễn hình ảnh. Đọc {AGENTS / 'scriptwriter.md'} và {AGENTS / 'prompt-artist.md'}. "
+                f"{common} Người dùng yêu cầu: \"{instruction.strip()}\".{only} Sửa script.yaml đúng theo yêu cầu "
+                "(ô tiếng Việt theo scriptwriter; nếu sửa veo_prompt thì theo prompt-artist và chạy mark-prompts). "
+                "Không sửa phần locked: true. Validate đến khi OK. Báo cáo ngắn đã đổi gì.")
     raise ValueError(kind)
 
 
-def build_job_cmd(kind: str, project_root: Path, scenes: list[str] | None) -> list[str]:
+def build_job_cmd(kind: str, project_root: Path, scenes: list[str] | None, instruction: str = "") -> list[str]:
     if kind in CLI_KINDS:
         cmd = [sys.executable, "-m", "vidflow", CLI_KINDS[kind], "-p", str(project_root)]
         for s in scenes or []:
@@ -63,7 +71,7 @@ def build_job_cmd(kind: str, project_root: Path, scenes: list[str] | None) -> li
         cmd = ["claude", "-p", "--permission-mode", "bypassPermissions"]
         if kind in ("refimg", "flow"):
             cmd.append("--chrome")
-        return cmd + [_claude_task(kind, project_root, scenes)]
+        return cmd + [_claude_task(kind, project_root, scenes, instruction)]
     raise ValueError(f"Không hỗ trợ việc '{kind}'")
 
 
@@ -94,22 +102,27 @@ class JobRunner:
         self._lock = threading.Lock()
         self.current: Job | None = None
 
-    def command_for(self, kind: str, project_root: Path, scenes: list[str] | None) -> list[str]:
-        return build_job_cmd(kind, project_root, scenes)
+    def command_for(self, kind: str, project_root: Path, scenes: list[str] | None, instruction: str = "") -> list[str]:
+        return build_job_cmd(kind, project_root, scenes, instruction)
 
     def busy(self) -> bool:
         return self.current is not None and self.current.state == "running"
 
-    def start(self, kind: str, project: str, project_root: Path, scenes: list[str] | None = None) -> Job:
+    def start(self, kind: str, project: str, project_root: Path, scenes: list[str] | None = None,
+              instruction: str = "") -> Job:
         with self._lock:
             if self.busy():
                 raise RuntimeError(f"Đang chạy: {LABELS.get(self.current.kind, self.current.kind)}")
+            if kind == "assist" and not instruction.strip():
+                raise ValueError("Cần nội dung yêu cầu cho AI")
             logs = project_root / "logs"
             logs.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             log_path = logs / f"job-{stamp}-{kind}.log"
             f = open(log_path, "w", encoding="utf-8")
-            proc = subprocess.Popen(self.command_for(kind, project_root, scenes), cwd=REPO, stdout=f,
+            cmd = self.command_for(kind, project_root, scenes, instruction) if instruction else \
+                self.command_for(kind, project_root, scenes)
+            proc = subprocess.Popen(cmd, cwd=REPO, stdout=f,
                                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
             self.current = Job(kind, project, log_path, proc, stamp, scenes, f)
             return self.current

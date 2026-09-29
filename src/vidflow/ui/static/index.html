@@ -9,7 +9,7 @@
 <body>
 <div class="nebula"></div><canvas id="stars" aria-hidden="true"></canvas>
 <header>
-  <h1>vidflow</h1>
+  <h1 id="homeBtn" title="Trang chủ" style="cursor:pointer">vidflow</h1>
   <select id="projectSel" aria-label="Chọn project"></select>
   <button id="newBtn">+ Video mới</button>
   <span style="flex:1"></span>
@@ -26,17 +26,21 @@
 <dialog id="newDlg">
   <form method="dialog" id="newForm">
     <h3 style="margin-top:0">✦ Video mới</h3>
+    <p class="hint">Chỉ cần ý tưởng + model. AI sẽ viết phần còn lại, bạn duyệt từng bước.</p>
     <div class="grid">
-      <label class="f wide">Ý tưởng<textarea name="idea" required placeholder="vd: video hài 20s về cà phê sáng, nhân vật đeo kính tóc rẽ ngôi"></textarea></label>
-      <label class="f">Tựa<input type="text" name="title" required></label>
-      <label class="f">Tên thư mục (không dấu)<input type="text" name="name" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="cafe-sang-2"></label>
-      <label class="f">Tỉ lệ<select name="aspect"><option>9:16</option><option>16:9</option></select></label>
-      <label class="f">Model video (Google Flow)<select name="video_model" required><option value="">— chọn —</option><option>Veo 3.1 Lite</option><option>Veo 3.1 Fast</option><option>Veo 3.1 Quality</option><option>Omni 1.1 Flash</option></select></label>
-      <label class="f">Độ phân giải tải về<select name="resolution"><option>720p</option><option>1080p</option></select></label>
-      <label class="checks wide"><label><input type="checkbox" name="start" checked> Bắt đầu: Claude viết kịch bản chi tiết ngay</label></label>
+      <label class="f wide"><span class="flabel">💡 Ý tưởng (1–2 câu: chuyện gì, ai, cảm xúc, dài bao lâu)</span>
+        <textarea name="idea" required rows="3" placeholder="vd: video hài 20s về cà phê sáng, nhân vật đeo kính tóc rẽ ngôi"></textarea>
+        <span class="hint">Ví dụ — bấm để dùng:</span><div class="chips" id="ideaEx"></div></label>
+      <label class="f"><span class="flabel">Tựa</span><input type="text" name="title" required></label>
+      <label class="f"><span class="flabel">Tên thư mục (không dấu)</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="cafe-sang-2"></label>
+      <label class="f"><span class="flabel">Loại hình ảnh</span><select name="style_type"><option value="anim_3d">Hoạt hình 3D</option><option value="anim_2d">Hoạt hình 2D</option><option value="live_action">Người thật</option><option value="ugc">Quay điện thoại (UGC)</option></select></label>
+      <label class="f"><span class="flabel">Tỉ lệ</span><select name="aspect"><option>9:16</option><option>16:9</option></select></label>
+      <label class="f"><span class="flabel">Model video (Google Flow) — bắt buộc</span><select name="video_model" required><option value="">— chọn —</option><option>Veo 3.1 Lite</option><option>Veo 3.1 Fast</option><option>Veo 3.1 Quality</option><option>Omni 1.1 Flash</option></select></label>
+      <label class="f"><span class="flabel">Độ phân giải tải về</span><select name="resolution"><option>720p</option><option>1080p</option></select></label>
+      <div class="checks wide"><label><input type="checkbox" name="start" checked> ✨ Cho AI viết kịch bản chi tiết ngay sau khi tạo</label></div>
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:14px">
-      <button value="cancel" formnovalidate>Hủy</button><button value="ok" class="primary">Tạo</button>
+      <button value="cancel" formnovalidate>Hủy</button><button value="ok" class="primary">Tạo video</button>
     </div>
   </form>
 </dialog>
