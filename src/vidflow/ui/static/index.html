@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>vidflow Studio</title>
+<meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div class="nebula"></div><canvas id="stars" aria-hidden="true"></canvas>
 <header>
   <h1>vidflow</h1>
   <select id="projectSel" aria-label="Chọn project"></select>
@@ -23,7 +25,7 @@
 
 <dialog id="newDlg">
   <form method="dialog" id="newForm">
-    <h3 style="margin-top:0;color:#000080">Video mới</h3>
+    <h3 style="margin-top:0">✦ Video mới</h3>
     <div class="grid">
       <label class="f wide">Ý tưởng<textarea name="idea" required placeholder="vd: video hài 20s về cà phê sáng, nhân vật đeo kính tóc rẽ ngôi"></textarea></label>
       <label class="f">Tựa<input type="text" name="title" required></label>
@@ -38,6 +40,7 @@
     </div>
   </form>
 </dialog>
+<script src="/static/galaxy.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

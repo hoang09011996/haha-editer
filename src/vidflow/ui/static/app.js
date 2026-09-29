@@ -136,7 +136,7 @@ function render() {
   const tabs = [["profile", "Hồ sơ"], ["cast", "Nhân vật · Bối cảnh · Đạo cụ"], ["scenes", "Cảnh"], ["run", "Chạy & Dựng"]];
   const bar = h("div", { class: "tabs" }, tabs.map(([k, l]) => h("button", { class: S.tab === k ? "active" : "", onclick: () => { S.tab = k; render(); } }, l)));
   const body = { profile: renderProfile, cast: renderCast, scenes: renderScenes, run: renderRun }[S.tab]();
-  main.replaceChildren(h("h2", { style: "margin:0 0 10px;color:#000080" }, S.data.script.title), bar, body);
+  main.replaceChildren(h("h2", { style: "margin:0 0 12px" }, S.data.script.title), bar, body);
 }
 
 function renderProfile() {
