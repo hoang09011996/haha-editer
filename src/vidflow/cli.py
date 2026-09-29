@@ -239,18 +239,43 @@ def mark_prompts(project: ProjectOpt, scene: ScenesOpt = None):
     typer.echo(f"Đã đánh dấu {len(targets)} cảnh: {', '.join(targets)}")
 
 
+PASSWORD_FILE = Path.home() / ".vidflow" / "ui_password"
+
+
+def ui_password(create: bool) -> str | None:
+    """Mật khẩu UI: biến môi trường VIDFLOW_UI_PASSWORD, hoặc file ~/.vidflow/ui_password (chmod 600)."""
+    import os
+    import secrets
+
+    if os.environ.get("VIDFLOW_UI_PASSWORD"):
+        return os.environ["VIDFLOW_UI_PASSWORD"]
+    if PASSWORD_FILE.is_file():
+        return PASSWORD_FILE.read_text(encoding="utf-8").strip() or None
+    if not create:
+        return None
+    PASSWORD_FILE.parent.mkdir(mode=0o700, exist_ok=True)
+    pw = secrets.token_urlsafe(12)
+    PASSWORD_FILE.write_text(pw, encoding="utf-8")
+    PASSWORD_FILE.chmod(0o600)
+    return pw
+
+
 @command
 def ui(projects: Annotated[Path, typer.Option("--projects", help="Thư mục chứa các project")] = Path("projects"),
        port: Annotated[int, typer.Option(help="Cổng web")] = 8777, config: ConfigOpt = None,
-       open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Tự mở trình duyệt")] = True):
+       open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Tự mở trình duyệt")] = True,
+       auth: Annotated[bool, typer.Option("--auth/--no-auth", help="Bắt đăng nhập (bắt buộc khi mở ra internet)")] = False):
     """Mở giao diện web cục bộ (http://127.0.0.1:<port>)."""
     import threading
     import webbrowser
 
     from vidflow.ui.server import serve
 
+    password = ui_password(create=True) if auth else None
     url = f"http://127.0.0.1:{port}"
     typer.echo(f"vidflow UI: {url}  (Ctrl+C để dừng)")
+    if password:
+        typer.echo(f"Đăng nhập bằng mật khẩu trong {PASSWORD_FILE} (hoặc biến VIDFLOW_UI_PASSWORD).")
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    serve(projects, port=port, config_path=config)
+    serve(projects, port=port, config_path=config, password=password)

@@ -15,6 +15,7 @@ from vidflow.inputs import scene_fields_hash
 from vidflow.project import Project, create_project
 from vidflow.schema import FlowSettings, Script
 from vidflow.status import scene_rows
+from vidflow.ui.auth import Auth
 from vidflow.ui.jobs import KINDS, JobRunner
 from vidflow.ui.suggest import Suggester
 
@@ -52,12 +53,18 @@ class PickRequest(BaseModel):
 
 
 def create_app(projects_root: Path, runner: JobRunner | None = None, config_path: Path | None = None,
-               suggester: Suggester | None = None) -> FastAPI:
+               suggester: Suggester | None = None, password: str | None = None) -> FastAPI:
     projects_root = Path(projects_root).resolve()
     projects_root.mkdir(parents=True, exist_ok=True)
     runner = runner or JobRunner()
     suggester = suggester or Suggester()
-    app = FastAPI(title="vidflow")
+    app = FastAPI(title="vidflow", docs_url=None, redoc_url=None, openapi_url=None)
+    if password:
+        auth = Auth(password)
+        app.middleware("http")(auth.middleware)
+        app.add_api_route("/login", lambda: auth.login_page(), methods=["GET"])
+        app.add_api_route("/login", auth.login, methods=["POST"])
+        app.add_api_route("/logout", auth.logout, methods=["POST", "GET"])
 
     def open_project(name: str) -> Project:
         if not NAME_RE.match(name) or not (projects_root / name / "script.yaml").is_file():
@@ -194,7 +201,9 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
     return app
 
 
-def serve(projects_root: Path, host: str = "127.0.0.1", port: int = 8777, config_path: Path | None = None) -> None:
+def serve(projects_root: Path, host: str = "127.0.0.1", port: int = 8777, config_path: Path | None = None,
+          password: str | None = None) -> None:
     import uvicorn
 
-    uvicorn.run(create_app(projects_root, config_path=config_path), host=host, port=port, log_level="warning")
+    uvicorn.run(create_app(projects_root, config_path=config_path, password=password), host=host, port=port,
+                log_level="warning", proxy_headers=False)

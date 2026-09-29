@@ -137,6 +137,7 @@ function h(tag, attrs = {}, ...kids) {
 }
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  if (r.status === 401) { location.href = "/login"; throw new Error("Cần đăng nhập"); }
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.detail || `Lỗi ${r.status}`);
   return body;
