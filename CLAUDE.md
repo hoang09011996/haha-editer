@@ -9,4 +9,5 @@ Luồng: ý tưởng → kịch bản → prompt/ảnh nhân vật → voice-ove
 - CapCut macOS bị sandbox (chỉ đọc `~/Movies`): `vidflow build` copy media vào `~/Movies/vidflow_media/<draft>/` và ghi cả `draft_info.json`. `build` từ chối chạy khi CapCut đang mở.
 - Cấu hình: `vidflow.toml` (không commit, mẫu ở `vidflow.toml.example`); API key đọc từ `GEMINI_API_KEY`.
 - Gen video: `vidflow prompts` → Google Flow → `vidflow import`. TTS dùng Gemini API free tier.
+- Giao diện: `uv run vidflow ui` (http://127.0.0.1:8777) — sửa kịch bản chi tiết, xem media, chạy từng bước.
 - Test: `uv run pytest`.

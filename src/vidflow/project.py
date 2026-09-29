@@ -71,6 +71,11 @@ class Project:
         except ValidationError as e:
             raise ScriptError(f"script.yaml không hợp lệ:\n{e}") from e
 
+    def save_script(self, script: Script) -> None:
+        data = script.model_dump(mode="json", exclude_defaults=True)
+        data.setdefault("title", script.title)
+        atomic_write_text(self.script_path, yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=1000))
+
     def load_state(self) -> ProjectState:
         if not self.state_path.is_file():
             return ProjectState()

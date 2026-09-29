@@ -222,3 +222,35 @@ def import_(project: ProjectOpt,
     if not scene_id or not file:
         raise VidflowError("Dùng: vidflow import -p <project> <scene> <file.mp4>  hoặc  --inbox")
     typer.echo(f"  ✓ {scene_id} ← {import_clip(p, cfg, scene_id, file)}")
+
+
+@command(name="mark-prompts")
+def mark_prompts(project: ProjectOpt, scene: ScenesOpt = None):
+    """Đánh dấu veo_prompt đã viết khớp các ô chi tiết hiện tại (agent chạy sau khi viết prompt)."""
+    from vidflow.inputs import scene_fields_hash
+
+    p = Project.open(project)
+    script = p.load_script()
+    targets = scene or [s.id for s in script.scenes if s.veo_prompt.strip()]
+    for sid in targets:
+        sc = script.scene(sid)
+        sc.prompt_fields_hash = scene_fields_hash(script, sc)
+    p.save_script(script)
+    typer.echo(f"Đã đánh dấu {len(targets)} cảnh: {', '.join(targets)}")
+
+
+@command
+def ui(projects: Annotated[Path, typer.Option("--projects", help="Thư mục chứa các project")] = Path("projects"),
+       port: Annotated[int, typer.Option(help="Cổng web")] = 8777, config: ConfigOpt = None,
+       open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Tự mở trình duyệt")] = True):
+    """Mở giao diện web cục bộ (http://127.0.0.1:<port>)."""
+    import threading
+    import webbrowser
+
+    from vidflow.ui.server import serve
+
+    url = f"http://127.0.0.1:{port}"
+    typer.echo(f"vidflow UI: {url}  (Ctrl+C để dừng)")
+    if open_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    serve(projects, port=port, config_path=config)

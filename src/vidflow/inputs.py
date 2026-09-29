@@ -29,6 +29,10 @@ def compose_veo_prompt(script: Script, scene: Scene) -> str:
         parts.append(f"Style: {script.style}.")
     for cid in scene.characters:
         parts.append(f"{cid}: {script.character(cid).description}.")
+    for pid in scene.props:
+        prop = script.prop(pid)
+        if prop.description:
+            parts.append(f"{prop.name or pid}: {prop.description}.")
     parts.append(scene.veo_prompt.strip())
     if not scene.veo_audio:
         parts.append("No dialogue, no narration, no music.")
@@ -55,4 +59,19 @@ def video_hash(project: Project, script: Script, scene: Scene, cfg: Config) -> s
         "model": cfg.veo_model,
         "resolution": cfg.veo_resolution,
         "refs": [_file_digest(p) for p in scene_ref_images(project, script, scene)],
+    })
+
+
+PROMPT_EXCLUDED = {"veo_prompt", "veo_prompt_vi", "status", "locked", "notes", "prompt_fields_hash", "narration"}
+
+
+def scene_fields_hash(script: Script, scene: Scene) -> str:
+    """Hash các ô chi tiết (và hồ sơ nhân vật/bối cảnh/đạo cụ liên quan) mà prompt được viết từ đó."""
+    loc = next((l.model_dump() for l in script.locations if l.id == scene.location), None)
+    return _digest({
+        "scene": scene.model_dump(exclude=PROMPT_EXCLUDED),
+        "style": script.style, "profile": script.profile.model_dump(),
+        "characters": [c.model_dump(exclude={"ref_image", "description"}) for c in script.characters if c.id in scene.characters],
+        "location": loc,
+        "props": [p.model_dump() for p in script.props if p.id in scene.props],
     })

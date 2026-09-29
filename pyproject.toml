@@ -8,13 +8,18 @@ dependencies = [
   "pyyaml>=6",
   "google-genai>=1.0",
   "pycapcut @ git+https://github.com/GuanYixuan/pyCapCut@3e8209add858588e3a29216f5f8e76089559130b",
+  "fastapi>=0.141.1",
+  "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 vidflow = "vidflow.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]
