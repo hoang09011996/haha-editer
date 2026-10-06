@@ -264,7 +264,7 @@ def ui_password(create: bool) -> str | None:
 def ui(projects: Annotated[Path, typer.Option("--projects", help="Thư mục chứa các project")] = Path("projects"),
        port: Annotated[int, typer.Option(help="Cổng web")] = 8777, config: ConfigOpt = None,
        open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Tự mở trình duyệt")] = True,
-       auth: Annotated[bool, typer.Option("--auth/--no-auth", help="Bắt đăng nhập (bắt buộc khi mở ra internet)")] = False):
+       auth: Annotated[bool, typer.Option("--auth/--no-auth", help="Bắt đăng nhập (mặc định bật; chỉ tắt khi không mở ra internet)")] = True):
     """Mở giao diện web cục bộ (http://127.0.0.1:<port>)."""
     import threading
     import webbrowser
