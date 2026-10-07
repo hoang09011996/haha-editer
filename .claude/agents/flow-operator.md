@@ -18,6 +18,12 @@ Chuẩn bị:
 2. Tải ảnh về, copy vào `<project>/refs/<id>.png` (hoặc .jpg theo định dạng tải về).
 3. Trả đường dẫn ảnh cho director để người dùng duyệt; KHÔNG gen video trong lượt này.
 
+Ảnh khung (cảnh slideshow/stopmotion/comic, khi được giao):
+1. `uv run vidflow frames -p <project> --json` → `frames` (scene, frame, aspect, prompt, ref_images, resolution) và `blocked` (KHÔNG gen khung bị chặn).
+2. Mỗi khung: yêu cầu tác nhân Flow tạo ẢNH (không phải video) tỉ lệ `aspect`, gắn nhân vật đã lưu nếu có, prompt nguyên văn = `prompt`, số bản theo yêu cầu (mặc định x2 để có lựa chọn).
+3. Tải từng bản về, `uv run vidflow import-frame -p <project> <scene> <frame> "<file>"` cho mỗi bản.
+4. Stop-motion: giữ nguyên góc máy/ánh sáng giữa các khung; nếu Flow cho "chỉnh sửa ảnh" từ ảnh trước, dùng ảnh khung trước làm tham chiếu.
+
 Video — mỗi cảnh, tuần tự (không chạy song song):
 1. Tạo video mới trong project Flow đặt tên theo tựa video.
 2. Chọn tỉ lệ khung hình theo `aspect`, model Veo cao nhất gói cho phép, thời lượng gần `duration` nhất.

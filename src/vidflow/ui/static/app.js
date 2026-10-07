@@ -101,8 +101,8 @@ const STEPS = [
     why: "Độ dài giọng đọc quyết định độ dài mỗi cảnh khi dựng.",
     example: "Puck · “giọng nam dí dỏm, nhấn nhá như kể chuyện cười”",
     done: d => (d.status || []).length > 0 && d.status.every(r => r.tts === "ok" || r.tts === "-") },
-  { id: "video", title: "Video (Google Flow)", icon: "🎥",
-    need: "Gen clip cho cảnh đã duyệt bằng tín dụng gói, xem và chọn take.",
+  { id: "video", title: "Hình & Video (Flow)", icon: "🎥",
+    need: "Gen clip (cảnh veo) hoặc ảnh khung (cảnh ảnh) bằng tín dụng gói; chọn bản; render cảnh ảnh.",
     why: "Chạy trong Chrome đã đăng nhập Flow; mỗi clip tốn ~10–12 tín dụng (đo được với project cà phê).",
     example: "s01 take 1 ✓ · s03 gen lại vì đạo cụ sai",
     done: d => (d.status || []).length > 0 && d.status.filter(r => r.status === "approved").every(r => r.clip === "ok") },
@@ -113,7 +113,7 @@ const STEPS = [
     done: d => !!d.state?.draft_path },
 ];
 const STEP_JOBS = { idea: ["script", "✨ AI viết toàn bộ kịch bản chi tiết"], cast: ["script", "✨ AI điền nhân vật & bối cảnh"], story: ["script", "✨ AI viết/hoàn thiện các cảnh"],
-  shots: ["prompts", "✨ AI viết prompt chi tiết"], voice: ["tts", "🎙️ Tạo giọng đọc"], video: ["flow", "🎥 Gen video trong Flow"], build: ["build", "✂️ Dựng draft CapCut"] };
+  shots: ["prompts", "✨ AI viết prompt chi tiết"], shots2: ["review", "🛡️ Kiểm duyệt prompt"], voice: ["tts", "🎙️ Tạo giọng đọc"], video: ["flow", "🎥 Gen video trong Flow"], build: ["build", "✂️ Dựng draft CapCut"] };
 const TEMPLATES = [
   { icon: "☕", title: "Hài đời thường", idea: "Video hài 20s: anh chàng đeo kính, tóc rẽ ngôi, sáng dậy như zombie, thử cà phê sữa chua theo trend rồi tỉnh vì chua", style: "anim_3d", aspect: "9:16" },
   { icon: "🏪", title: "Review quán", idea: "Review 30s một quán cà phê nhỏ ở Hà Nội: không gian, món signature, cảm nhận ngụm đầu; tông ấm, chân thực", style: "live_action", aspect: "9:16" },
@@ -194,6 +194,7 @@ function guide(step) {
       h("div", {}, h("b", {}, "Vì sao"), h("p", {}, step.why)),
       h("div", {}, h("b", {}, "Ví dụ"), h("p", { class: "ex" }, step.example))),
     STEP_JOBS[step.id] ? h("div", { class: "row" }, h("button", { class: "primary", disabled: S.job?.state === "running", onclick: () => stepJob(step.id) }, STEP_JOBS[step.id][1]),
+      step.id === "shots" ? h("button", { disabled: S.job?.state === "running", onclick: () => runJob("review") }, "🛡️ Kiểm duyệt prompt (agent độc lập)") : null,
       h("span", { class: "hint" }, "hoặc tự điền các ô bên dưới — bấm ✨ ở từng ô để AI gợi ý")) : null);
 }
 
@@ -338,7 +339,8 @@ function vStory() {
           h("div", { class: "f" }, h("span", { class: "flabel" }, "Đạo cụ"), checkGroup((s.props || []).map(p => [p.id, p.name || p.id]), sc.props)),
           F("Một hành động chính", sc, "action", { type: "textarea", wide: true, scene: sc.id }),
           F("Chia mốc thời gian (tùy chọn)", sc, "beats", { type: "textarea", wide: true, scene: sc.id }),
-          F("Biểu cảm", sc, "expression", { scene: sc.id }), F("Trạng thái đạo cụ / trang phục", sc, "prop_state", { scene: sc.id })));
+          F("Biểu cảm", sc, "expression", { scene: sc.id }), F("Trạng thái đạo cụ / trang phục", sc, "prop_state", { scene: sc.id })),
+        modeBlock(sc));
     }),
     s.scenes.length ? null : h("div", { class: "card empty-card" }, "Chưa có cảnh — bấm nút ✨ AI ở trên hoặc “+ Thêm cảnh”."));
 }
@@ -349,7 +351,8 @@ function vShots() {
       h("button", { onclick: () => confirmFlow(null, "refimg") }, "Tạo ảnh còn thiếu trong Flow")),
       h("p", { class: "hint" }, "Ảnh nền trơn, đủ mặt và trang phục — Flow dùng làm “nhân vật” để giữ nhất quán giữa các clip."),
       h("div", { class: "refs" }, (s.characters || []).map(c => { const f = refs.find(r => r.startsWith(c.id + ".")); return h("figure", {}, f ? h("img", { src: media("refs/" + f) }) : h("div", { class: "noimg" }, "Chưa có ảnh"), h("figcaption", {}, c.name || c.id)); }))),
-    h("div", { class: "card" }, h("h3", {}, "Style chung gửi Veo"), F("Style (tiếng Anh)", s, "style", { type: "textarea", wide: true, ai: false })),
+    h("div", { class: "card" }, h("h3", {}, "Style chung"), F("Phong cách (ghép vào đầu mọi prompt)", s, "style", { type: "textarea", wide: true, ai: false })),
+    blockedCard(),
     (s.scenes || []).map((sc, idx) => {
       sc.avoid = sc.avoid || []; sc.anti_ai = sc.anti_ai || [];
       const stale = S.data.prompt_stale?.[sc.id];
@@ -370,9 +373,9 @@ function vShots() {
           h("div", { class: "f" }, h("span", { class: "flabel" }, "Chống chất AI"), checkGroup(ANTI_AI, sc.anti_ai)),
           h("div", { class: "f", style: "margin-top:8px" }, h("span", { class: "flabel" }, "Cần tránh"), checkGroup(AVOID.map(a => [a, a]), sc.avoid)),
           F("Ghi chú cho AI", sc, "notes", { type: "textarea", wide: true, scene: sc.id })),
-        h("div", { class: "promptbox" }, h("div", { class: "row between" }, h("b", {}, "📜 Prompt"), h("button", { class: "small", onclick: () => runJob("prompts", [sc.id]) }, "✨ Viết lại prompt cảnh này")),
+        sc.mode && sc.mode !== "veo" ? framePrompts(sc) : h("div", { class: "promptbox" }, h("div", { class: "row between" }, h("b", {}, "📜 Prompt"), reviewBadge(sc.id, null, sc.review), h("button", { class: "small", onclick: () => runJob("prompts", [sc.id]) }, "✨ Viết lại prompt cảnh này")),
           sc.veo_prompt_vi ? h("div", { class: "prompt" }, sc.veo_prompt_vi) : h("p", { class: "hint" }, "Chưa có — bấm “✨ AI viết prompt chi tiết” ở trên."),
-          sc.veo_prompt ? h("details", {}, h("summary", {}, "Bản tiếng Anh gửi Flow (sửa tay nếu cần)"), F("veo_prompt", sc, "veo_prompt", { type: "textarea", wide: true, rows: 5, ai: false, chips: false, noHint: true })) : null));
+          sc.veo_prompt ? h("details", {}, h("summary", {}, "Prompt gửi Flow (sửa tay nếu cần)"), F("veo_prompt", sc, "veo_prompt", { type: "textarea", wide: true, rows: 5, ai: false, chips: false, noHint: true })) : null));
     }));
 }
 function vVoice() {
@@ -394,7 +397,11 @@ function vVideo() {
     h("div", { class: "card" }, h("h3", {}, "Cài đặt Flow"), h("div", { class: "grid" },
       F("Model video", s.flow, "video_model", { type: "select", options: OPT.models }), F("Độ phân giải", s.flow, "resolution", { type: "select", options: ["720p", "1080p"] })),
       h("p", { class: "hint" }, "Trước khi chạy: Chrome đã đăng nhập Flow, tắt “Hỏi nơi lưu mỗi tệp”, không thao tác Chrome khi đang gen.")),
+    h("div", { class: "card row" }, h("button", { class: "primary", onclick: () => confirmFlow(null, "frames_flow") }, "🖼️ Gen ảnh khung còn thiếu (Flow)"),
+      h("button", { onclick: () => runJob("render") }, "🎞️ Render tất cả cảnh ảnh"), h("span", { class: "hint" }, `${(S.data.frames_pending || []).length} khung chờ gen ảnh`)),
+    blockedCard(),
     (s.scenes || []).map(sc => { const x = st[sc.id] || {}; const takes = x.takes || [];
+      if (sc.mode && sc.mode !== "veo") return imageSceneCard(sc, x);
       return h("div", { class: `card scene ${sc.status === "approved" ? "approved" : ""}` },
         h("div", { class: "row between" }, h("span", {}, h("b", { class: "sid" }, sc.id), " ", h("span", { class: "mini" }, sc.action || "")),
           sc.status === "approved" ? h("button", { class: "small", onclick: () => confirmFlow([sc.id]) }, takes.length ? "🔁 Gen lại" : "🎥 Gen cảnh này") : h("span", { class: "badge stale" }, "chưa duyệt")),
@@ -415,6 +422,99 @@ function vBuild() {
     h("div", { class: "card" }, h("h3", {}, "Trạng thái"), h("table", {}, h("tr", {}, ["Cảnh", "Duyệt", "Voice", "Take", "Clip", "Lỗi"].map(x => h("th", {}, x))),
       (S.data.status || []).map(r => h("tr", {}, [r.id, r.status, r.tts, r.picked, r.clip, r.error].map(x => h("td", {}, esc(x))))))),
     S.data.state?.draft_path ? h("div", { class: "card" }, h("h3", {}, "✅ Draft đã dựng"), h("p", {}, S.data.state.draft_path), h("p", { class: "hint" }, "Mở CapCut → project này → chỉnh nhẹ → Export.")) : null);
+}
+
+
+// ================= cảnh dựng từ ảnh =================
+const MODES = [["veo", "🎥 Video Veo"], ["slideshow", "🖼️ Slideshow ảnh (zoom/lia)"], ["stopmotion", "🎞️ Stop-motion"], ["comic", "💬 Truyện tranh"]];
+const MOTIONS = [["zoom_in", "Zoom vào"], ["zoom_out", "Zoom ra"], ["pan_left", "Lia trái"], ["pan_right", "Lia phải"], ["pan_up", "Lia lên"], ["pan_down", "Lia xuống"], ["static", "Đứng yên"]];
+Object.assign(HELP, {
+  description: { hint: "Trong khung có gì: ai, đang làm gì (một khoảnh khắc), ở đâu.", ex: ["Tuấn đứng trước tủ lạnh, mắt nhắm, tay cầm hộp sữa chua", "cận cảnh ly cà phê đá, sữa chua trắng loang dần"] },
+  caption: { hint: "Câu trong bong bóng thoại (truyện tranh). Ngắn, ≤ 15 từ.", ex: ["Ủa, sao chua thế!", "Trend gì kỳ vậy trời…"] },
+});
+function modeBlock(sc) {
+  sc.frames = sc.frames || []; sc.mode = sc.mode || "veo";
+  const mode = h("select", { onchange: e => { sc.mode = e.target.value; markDirty(); render(); } }, MODES.map(([v, l]) => h("option", { value: v, selected: sc.mode === v }, l)));
+  const box = h("div", { class: "modebox" }, h("div", { class: "row" }, h("span", { class: "flabel" }, "Cách làm cảnh"), mode,
+    sc.mode !== "veo" ? h("span", { class: "row" },
+      h("span", { class: "flabel" }, "Ghép bằng"), h("select", { onchange: e => { sc.assemble = e.target.value; markDirty(); } },
+        [["ffmpeg", "Render clip (ffmpeg)"], ["capcut", "Từng ảnh trong CapCut"]].map(([v, l]) => h("option", { value: v, selected: (sc.assemble || "ffmpeg") === v }, l))),
+      sc.mode === "stopmotion" ? h("label", { class: "row" }, "fps", (() => { const i = h("input", { type: "number", min: 6, max: 12, style: "width:70px" }); i.value = sc.fps || 8; i.oninput = () => { sc.fps = Number(i.value); markDirty(); }; return i; })()) : null,
+      sc.mode === "slideshow" ? h("select", { onchange: e => { sc.transition = e.target.value; markDirty(); } }, [["fade", "Chuyển: mờ dần"], ["slide", "Chuyển: trượt"], ["cut", "Chuyển: cắt"]].map(([v, l]) => h("option", { value: v, selected: (sc.transition || "fade") === v }, l))) : null) : null));
+  if (sc.mode === "veo") return box;
+  const add = () => { const n = sc.frames.length + 1; sc.frames.push({ id: "f" + String(n).padStart(2, "0"), description: "", prompt: "", seconds: sc.mode === "stopmotion" ? 1 : 2, motion: sc.mode === "stopmotion" ? "static" : "zoom_in", caption: "", status: "draft" }); markDirty(); render(); };
+  const allOk = sc.frames.length && sc.frames.every(f => f.status === "approved");
+  box.append(h("div", { class: "row", style: "margin:8px 0" }, h("button", { class: "small", onclick: add }, "+ Thêm khung"),
+    h("button", { class: "small", onclick: () => { sc.frames.forEach(f => (f.status = allOk ? "draft" : "approved")); markDirty(); render(); } }, allOk ? "Bỏ duyệt khung" : "✓ Duyệt mọi khung"),
+    h("span", { class: "badge" }, `${sc.frames.length} khung`)),
+    h("div", { class: "frames" }, sc.frames.map((f, i) => frameCard(sc, f, i))));
+  return box;
+}
+function frameCard(sc, f, i) {
+  const ap = h("input", { type: "checkbox" }); ap.checked = f.status === "approved";
+  ap.onchange = () => { f.status = ap.checked ? "approved" : "draft"; markDirty(); };
+  const move = d => { const j = i + d; if (j < 0 || j >= sc.frames.length) return; [sc.frames[i], sc.frames[j]] = [sc.frames[j], sc.frames[i]]; markDirty(); render(); };
+  const img = pickedImage(sc.id, f.id);
+  return h("div", { class: "frame" },
+    h("div", { class: "row between" }, h("b", { class: "sid" }, f.id), h("span", { class: "row" }, h("label", { class: "checks" }, ap, "Duyệt"), checkbox("🔒", f, "locked"),
+      h("button", { class: "small", onclick: () => move(-1) }, "↑"), h("button", { class: "small", onclick: () => move(1) }, "↓"),
+      h("button", { class: "danger small", onclick: () => { sc.frames.splice(i, 1); markDirty(); render(); } }, "✕"))),
+    img ? h("img", { class: "thumb", src: media(img) }) : null,
+    F("Trong khung có gì", f, "description", { type: "textarea", scene: sc.id, help: "description", chips: false }),
+    sc.mode === "comic" ? F("Bong bóng thoại", f, "caption", { scene: sc.id, help: "caption", chips: false }) : null,
+    sc.mode !== "stopmotion" ? h("div", { class: "row" }, F("Giây", f, "seconds", { type: "number" }), F("Chuyển động", f, "motion", { type: "select", options: MOTIONS })) : null);
+}
+function pickedImage(sid, fid) {
+  const fs = (S.data.state.scenes?.[sid]?.frames || {})[fid];
+  return fs && fs.picked != null ? fs.images[fs.picked].file : null;
+}
+function reviewBadge(sid, fid, review) {
+  const b = (S.data.blocked || []).find(x => x.scene === sid && (x.frame || null) === (fid || null));
+  const over = h("button", { class: "small", title: "Cho phép gen dù chưa qua kiểm duyệt", onclick: () => overrideReview(sid, fid) }, "Bỏ qua kiểm duyệt");
+  if (b) return h("span", { class: "row" }, h("span", { class: "badge " + (b.reason.startsWith("kiểm duyệt trượt") ? "err" : "stale"), title: review?.suggestion || "" }, "🛡️ " + b.reason), over);
+  if (!review) return h("span", { class: "badge" }, "🛡️ chưa kiểm duyệt");
+  return h("span", { class: "badge ok", title: review.suggestion || "" }, review.verdict === "override" ? "🛡️ đã bỏ qua kiểm duyệt" : `🛡️ đạt ${review.score}/10`);
+}
+function framePrompts(sc) {
+  return h("div", { class: "promptbox" }, h("div", { class: "row between" }, h("b", {}, `📜 Prompt từng khung (${sc.mode})`), h("button", { class: "small", onclick: () => runJob("prompts", [sc.id]) }, "✨ Viết lại prompt cảnh này")),
+    (sc.frames || []).map(f => h("div", { class: "frame-prompt" }, h("div", { class: "row between" }, h("b", { class: "sid" }, f.id), reviewBadge(sc.id, f.id, f.review)),
+      h("p", { class: "mini" }, f.description || "(chưa mô tả)"),
+      f.review?.issues?.length && f.review.verdict === "fail" ? h("ul", { class: "issues" }, f.review.issues.map(x => h("li", {}, x)), f.review.suggestion ? h("li", {}, "Gợi ý: " + f.review.suggestion) : null) : null,
+      F("Prompt khung", f, "prompt", { type: "textarea", rows: 4, ai: false, chips: false, noHint: true }))));
+}
+function blockedCard() {
+  const b = S.data.blocked || [];
+  if (!b.length) return null;
+  return h("div", { class: "card warn" }, h("h3", {}, `⛔ ${b.length} prompt chưa được phép gen`),
+    h("ul", {}, b.slice(0, 12).map(x => h("li", {}, `${x.scene}${x.frame ? "/" + x.frame : ""}: ${x.reason}`))),
+    h("button", { class: "primary small", disabled: S.job?.state === "running", onclick: () => runJob("review") }, "🛡️ Chạy kiểm duyệt"));
+}
+function imageSceneCard(sc, x) {
+  const takes = (x.takes || []), picked = x.picked != null ? takes[x.picked] : null;
+  return h("div", { class: `card scene ${sc.status === "approved" ? "approved" : ""}` },
+    h("div", { class: "row between" }, h("span", {}, h("b", { class: "sid" }, sc.id), " ", h("span", { class: "badge" }, MODES.find(m => m[0] === sc.mode)?.[1] || sc.mode), " ",
+      h("span", { class: "badge" }, (sc.assemble || "ffmpeg") === "capcut" ? "ghép trong CapCut" : "render ffmpeg")),
+      sc.status === "approved" ? h("span", { class: "row" }, h("button", { class: "small", onclick: () => confirmFlow([sc.id], "frames_flow") }, "🖼️ Gen ảnh cảnh này"),
+        (sc.assemble || "ffmpeg") === "ffmpeg" ? h("button", { class: "small primary", onclick: () => runJob("render", [sc.id]) }, "🎞️ Render") : null) : h("span", { class: "badge stale" }, "chưa duyệt")),
+    h("div", { class: "framegrid" }, (sc.frames || []).map(f => {
+      const fs = (x.frames || {})[f.id] || { images: [] };
+      return h("div", { class: "fcol" }, h("div", { class: "mini" }, `${f.id} · ${f.description || ""}`),
+        fs.images.length ? h("div", { class: "imgs" }, fs.images.map((im, i) => h("figure", { class: fs.picked === i ? "picked" : "" },
+          h("img", { src: media(im.file), loading: "lazy" }),
+          h("figcaption", {}, fs.picked === i ? "✓" : h("button", { class: "small", onclick: () => pickFrame(sc.id, f.id, i + 1) }, `Dùng bản ${i + 1}`)))))
+          : h("span", { class: "hint" }, f.status === "approved" ? "chưa có ảnh" : "khung chưa duyệt"));
+    })),
+    picked && picked.source === "render" ? h("div", { class: "media" }, h("figure", { class: "picked" }, h("video", { src: media(picked.file), controls: true, preload: "metadata" }), h("figcaption", {}, "clip đã render"))) : null);
+}
+async function pickFrame(scene, frame, n) {
+  try { await api(`/api/projects/${S.name}/pick-frame`, { method: "POST", body: JSON.stringify({ scene, frame, n }) }); toast(`${scene}/${frame}: dùng bản ${n} — nhớ Render lại`); openProject(S.name); }
+  catch (e) { toast(e.message, true); }
+}
+async function overrideReview(scene, frame) {
+  if (!confirm("Cho phép gen prompt này dù chưa qua kiểm duyệt?")) return;
+  if (S.dirty) { toast("Lưu thay đổi trước (Cmd+S).", true); return; }
+  try { await api(`/api/projects/${S.name}/review-override`, { method: "POST", body: JSON.stringify({ scene, frame }) }); openProject(S.name); }
+  catch (e) { toast(e.message, true); }
 }
 
 // ================= Trợ lý AI (cột phải) =================
@@ -471,7 +571,7 @@ function stepJob(id) {
 function confirmFlow(scenes, kind = "flow") {
   const s = S.data.script;
   if (!s.flow?.video_model) { toast("Chọn model video Google Flow ở bước 1 trước.", true); S.step = "idea"; render(); return; }
-  const what = kind === "refimg" ? "tạo ảnh nhân vật còn thiếu" : `gen video ${scenes ? scenes.join(", ") : "các cảnh đã duyệt"} bằng ${s.flow.video_model}, tải ${s.flow.resolution}`;
+  const what = kind === "refimg" ? "tạo ảnh nhân vật còn thiếu" : kind === "frames_flow" ? `gen ảnh khung ${scenes ? "của " + scenes.join(", ") : "còn thiếu"}` : `gen video ${scenes ? scenes.join(", ") : "các cảnh đã duyệt"} bằng ${s.flow.video_model}, tải ${s.flow.resolution}`;
   if (confirm(`Sẽ ${what} trong Google Flow (tốn tín dụng gói). Chrome phải đăng nhập Flow; đừng thao tác Chrome khi đang chạy. Tiếp tục?`)) runJob(kind, scenes);
 }
 async function runJob(kind, scenes = null, instruction = "") {

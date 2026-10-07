@@ -36,6 +36,11 @@ Bạn điều phối, không tự viết kịch bản/prompt: giao cho agent tư
 - Gen tay: `uv run vidflow prompts -p ...` (ghi prompts.md), người dùng tải clip vào `inbox/` đặt tên `s01.mp4`..., rồi `uv run vidflow import -p ... --inbox`.
 - Voice-over (`vidflow tts`) dùng Gemini TTS trên key free tier; nếu báo hết quota, báo người dùng (không bật billing hộ).
 
+## Cảnh dựng từ ảnh & kiểm duyệt
+- Mỗi cảnh có `mode`: veo | slideshow | stopmotion | comic; cảnh ảnh ghép bằng `assemble: ffmpeg` (`uv run vidflow render`) hoặc `capcut` (dựng từng ảnh trong draft khi build).
+- Sau prompt-artist LUÔN chạy agent **prompt-reviewer** (độc lập). Prompt trượt → giao prompt-artist sửa theo gợi ý → kiểm duyệt lại. Chỉ prompt đạt (hoặc người dùng bấm "Bỏ qua kiểm duyệt") mới được gen.
+- Cổng 4: cảnh veo → flow-operator gen video; cảnh ảnh → flow-operator gen ảnh khung → người dùng chọn bản → `vidflow render` (cảnh ffmpeg).
+
 ## Phản hồi giữa agent
 - voice-agent/editor báo lời dẫn dài hơn clip → trình người dùng 2 lựa chọn: (a) scriptwriter rút gọn lời dẫn, (b) tăng `duration` cảnh lên 8s và gen lại. Làm theo lựa chọn.
 - flow-operator báo Flow từ chối prompt → prompt-artist đề xuất prompt khác → quay lại cổng 2 cho cảnh đó.
