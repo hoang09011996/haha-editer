@@ -349,3 +349,28 @@ def render(project: ProjectOpt, scene: ScenesOpt = None, config: ConfigOpt = Non
         typer.secho(f"  bỏ qua {sid}: {why}", fg=typer.colors.YELLOW)
     if not rep["created"] and not rep["skipped"]:
         typer.echo("Không có cảnh ảnh nào cần render lại.")
+
+
+@command
+def assemble(images: Annotated[Path, typer.Option("--images", help="Thư mục ảnh NNN_MM-SS.jpg")],
+             audio: Annotated[Optional[Path], typer.Option("--audio", help="File giọng đọc (wav/mp3)")] = None,
+             beats: Annotated[Optional[Path], typer.Option("--beats", help="beats.json (mốc ms + phụ đề)")] = None,
+             name: Annotated[Optional[str], typer.Option("--name", help="Tên draft CapCut")] = None,
+             aspect: Annotated[str, typer.Option("--aspect", help="auto | 16:9 | 9:16")] = "auto",
+             zoom: Annotated[bool, typer.Option("--zoom/--no-zoom", help="Zoom nhẹ xen kẽ")] = True,
+             subtitles: Annotated[bool, typer.Option("--subtitles/--no-subtitles", help="Phụ đề từ beats.json")] = True,
+             config: ConfigOpt = None):
+    """Dựng draft CapCut thẳng từ thư mục ảnh NNN_MM-SS (+ voice, + beats.json)."""
+    import time
+
+    from vidflow.assemble import assemble as run_assemble
+
+    t0 = time.perf_counter()
+    rep = run_assemble(images, audio=audio, beats=beats, name=name, aspect=aspect, zoom=zoom, subtitles=subtitles,
+                       cfg=load_config(config))
+    for f in rep.skipped_files:
+        typer.secho(f"  bỏ qua {f}: tên không đúng mẫu NNN_MM-SS", fg=typer.colors.YELLOW)
+    for w in rep.warnings:
+        typer.secho(f"  ! {w}", fg=typer.colors.YELLOW)
+    typer.echo(f"Đã dựng {rep.count} ảnh, {rep.total_s:.1f}s trong {time.perf_counter() - t0:.1f}s → {rep.draft_dir}. "
+               "Mở CapCut để xem.")
