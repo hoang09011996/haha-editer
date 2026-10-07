@@ -349,3 +349,10 @@ def render(project: ProjectOpt, scene: ScenesOpt = None, config: ConfigOpt = Non
         typer.secho(f"  bỏ qua {sid}: {why}", fg=typer.colors.YELLOW)
     if not rep["created"] and not rep["skipped"]:
         typer.echo("Không có cảnh ảnh nào cần render lại.")
+
+
+# ---- Quy trình nhanh (spec 2026-10-07) ----
+from vidflow.quick.cli import preset_app, quick_app  # noqa: E402
+
+app.add_typer(quick_app, name="quick")
+app.add_typer(preset_app, name="preset")

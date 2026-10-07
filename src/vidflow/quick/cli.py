@@ -1,0 +1,229 @@
+"""`vidflow quick ...` và `vidflow preset ...`."""
+from __future__ import annotations
+
+import functools
+import json
+from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
+
+from vidflow.config import load_config
+from vidflow.errors import VidflowError
+from vidflow.quick import jobs, ops
+from vidflow.quick.model import create_quick, load_quick, require_beats
+from vidflow.quick.preset import import_preset, list_presets, load_preset
+
+quick_app = typer.Typer(no_args_is_help=True, help="Quy trình nhanh: ý tưởng → mốc → giọng → ảnh Flow → CapCut")
+preset_app = typer.Typer(no_args_is_help=True, help="Bộ kênh (brief + câu neo + giọng)")
+
+ProjectOpt = Annotated[Path, typer.Option("--project", "-p", help="Thư mục project nhanh")]
+ConfigOpt = Annotated[Optional[Path], typer.Option("--config", help="Đường dẫn vidflow.toml")]
+JsonFile = Annotated[Path, typer.Option("--json", help="File JSON đầu vào")]
+PrintOpt = Annotated[bool, typer.Option("--print", help="Chỉ in lệnh giao cho Claude, không chạy")]
+
+
+def _cmd(app: typer.Typer, name: str | None = None):
+    def register(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except VidflowError as e:
+                typer.secho(str(e), fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+
+        return app.command(name)(wrapper)
+
+    return register
+
+
+def _read_json(path: Path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError as e:
+        raise VidflowError(f"Không thấy {path}") from e
+    except json.JSONDecodeError as e:
+        raise VidflowError(f"{path}: JSON sai: {e}") from e
+
+
+def project_root(name: str) -> Path:
+    p = Path(name).expanduser()
+    return p if p.is_absolute() or len(p.parts) > 1 else Path("projects") / p
+
+
+# ---- project ----
+
+@_cmd(quick_app, "new")
+def new(name: Annotated[str, typer.Argument(help="Tên project (tạo trong projects/) hoặc đường dẫn")],
+        preset: Annotated[str, typer.Option(help="id bộ kênh trong presets/")],
+        title: Annotated[str, typer.Option(help="Tựa tạm")] = ""):
+    """Tạo project nhanh."""
+    load_preset(preset)
+    root = project_root(name)
+    create_quick(root, preset=preset, title=title)
+    typer.echo(f"Đã tạo {root}/quick.yaml (bộ kênh {preset})")
+
+
+def _claude(kind: str, project: Path, print_only: bool):
+    q = load_quick(project)
+    if kind == "script" and not q.picked_idea():
+        raise VidflowError("Chưa chọn ý tưởng — `vidflow quick pick -p ... <n>`.")
+    if kind in ("prompts", "flow"):
+        require_beats(project)
+    preset = load_preset(q.preset)
+    if print_only:
+        typer.echo(jobs.claude_task(kind, project, preset))
+        return
+    typer.echo(f"{jobs.LABELS[kind]}…")
+    rc = jobs.run_claude(kind, project, preset)
+    if rc:
+        raise VidflowError(f"Job Claude '{kind}' lỗi (mã {rc}).")
+    typer.echo(ops.format_status(ops.status_summary(project)))
+
+
+@_cmd(quick_app, "ideas")
+def ideas(project: ProjectOpt, print_only: PrintOpt = False):
+    """Claude đề xuất 5 ý tưởng (ghi quick.yaml)."""
+    _claude("ideas", project, print_only)
+
+
+@_cmd(quick_app, "script")
+def script(project: ProjectOpt, print_only: PrintOpt = False):
+    """Claude viết kịch bản và tách mốc (ghi beats.json)."""
+    _claude("script", project, print_only)
+
+
+@_cmd(quick_app, "prompts")
+def prompts(project: ProjectOpt, print_only: PrintOpt = False):
+    """Claude viết + tự kiểm duyệt prompt ảnh từng mốc."""
+    _claude("prompts", project, print_only)
+
+
+@_cmd(quick_app, "flow")
+def flow(project: ProjectOpt, print_only: PrintOpt = False):
+    """Gen ảnh mốc pending/redo trong Google Flow (claude --chrome)."""
+    _claude("flow", project, print_only)
+
+
+@_cmd(quick_app, "pick")
+def pick(project: ProjectOpt, n: Annotated[int, typer.Argument(help="Số ý tưởng (1-based)")]):
+    """Chọn ý tưởng."""
+    q = ops.pick_idea(project, n)
+    typer.echo(f"Đã chọn #{n}: {q.title}")
+
+
+@_cmd(quick_app, "voice")
+def voice(project: ProjectOpt, config: ConfigOpt = None):
+    """TTS từng mốc (Gemini free tier), ghép audio/voice.wav, điền mốc thời gian."""
+    from vidflow.quick.voice import gemini_voice
+
+    secs = gemini_voice(project, load_config(config), on_progress=lambda d, t: typer.echo(f"  đọc {d}/{t}"))
+    m, s = divmod(secs, 60)
+    typer.echo(f"Đã ghép audio/voice.wav: {int(m)}:{s:05.2f}")
+
+
+@_cmd(quick_app, "redo")
+def redo(project: ProjectOpt, n: Annotated[list[int], typer.Argument(help="Các mốc cần gen lại")]):
+    """Đánh dấu mốc cần gen lại ảnh."""
+    ops.mark_redo(project, n)
+    typer.echo(f"Đã đánh dấu gen lại: {', '.join(map(str, n))}")
+
+
+@_cmd(quick_app, "status")
+def status(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")] = False):
+    """Tóm tắt tiến độ."""
+    s = ops.status_summary(project)
+    typer.echo(json.dumps(s, ensure_ascii=False, indent=1) if json_out else ops.format_status(s))
+
+
+@_cmd(quick_app, "beats")
+def beats(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")] = False,
+          todo: Annotated[bool, typer.Option("--todo", help="Chỉ mốc cần gen ảnh")] = False):
+    """Liệt kê mốc (agent dùng --json)."""
+    data = ops.list_beats(project, todo=todo)
+    if json_out:
+        typer.echo(json.dumps(data, ensure_ascii=False, indent=1))
+        return
+    for b in data["beats"]:
+        t = "--:--" if b["start"] is None else f"{int(b['start'] // 60):02d}:{int(b['start'] % 60):02d}"
+        v = b["review"]["verdict"] if b["review"] else "-"
+        typer.echo(f"{b['n']:03d} [{t}] {b['status']:<7} {v:<5} {b['text'][:60]}")
+
+
+@_cmd(quick_app, "build")
+def build(project: ProjectOpt, name: Annotated[Optional[str], typer.Option(help="Tên draft")] = None,
+          zoom: Annotated[bool, typer.Option("--zoom/--no-zoom")] = True,
+          subtitles: Annotated[bool, typer.Option("--subtitles/--no-subtitles")] = True, config: ConfigOpt = None):
+    """Dựng draft CapCut từ images/ + audio/voice.wav + beats.json."""
+    from vidflow.quick.build import build_quick
+
+    res = build_quick(project, load_config(config), name=name, zoom=zoom, subtitles=subtitles)
+    typer.echo(f"Đã dựng draft: {res}")
+
+
+# ---- helper cho job Claude ----
+
+@_cmd(quick_app, "set-ideas")
+def set_ideas(project: ProjectOpt, json_file: JsonFile):
+    """Ghi danh sách ý tưởng [{title, hook, why_viral}]."""
+    q = ops.set_ideas(project, _read_json(json_file))
+    typer.echo(f"Đã ghi {len(q.ideas)} ý tưởng")
+
+
+@_cmd(quick_app, "set-beats")
+def set_beats(project: ProjectOpt, json_file: JsonFile):
+    """Ghi mới beats.json từ mảng câu (chuỗi hoặc {text})."""
+    b = ops.set_beat_texts(project, _read_json(json_file))
+    typer.echo(f"Đã ghi {len(b.beats)} mốc")
+
+
+@_cmd(quick_app, "set-prompt")
+def set_prompt(project: ProjectOpt, n: Annotated[int, typer.Argument()],
+               prompt: Annotated[str, typer.Option(help="Prompt đầy đủ (có câu neo)")],
+               verdict: Annotated[str, typer.Option(help="pass | fail")] = "pass",
+               score: Annotated[float, typer.Option(help="Điểm 0–10")] = 0,
+               issue: Annotated[Optional[list[str]], typer.Option("--issue", help="Vấn đề (lặp được)")] = None):
+    """Ghi prompt + kết quả tự kiểm duyệt cho một mốc."""
+    ops.set_prompt(project, n, prompt, verdict=verdict, score=score, issues=issue or [])
+    typer.echo(f"Mốc {n}: {verdict} ({score:g}/10)")
+
+
+@_cmd(quick_app, "set-prompts")
+def set_prompts(project: ProjectOpt, json_file: JsonFile):
+    """Ghi nhiều prompt [{n, prompt, verdict, score, issues}]."""
+    items = _read_json(json_file)
+    ops.set_prompts(project, items)
+    typer.echo(f"Đã ghi {len(items)} prompt")
+
+
+@_cmd(quick_app, "set-image")
+def set_image(project: ProjectOpt, n: Annotated[int, typer.Argument()], file: Annotated[Path, typer.Argument()]):
+    """Gắn ảnh cho mốc → images/NNN_MM-SS.<ext>."""
+    b = ops.set_image(project, n, file)
+    typer.echo(f"Mốc {n} → {b.image}")
+
+
+# ---- preset ----
+
+@_cmd(preset_app, "list")
+def preset_list():
+    """Liệt kê bộ kênh."""
+    for p in list_presets():
+        typer.echo(f"{p.id}\t{p.name}\t{p.aspect}\t{p.voice.name}")
+
+
+@_cmd(preset_app, "show")
+def preset_show(preset_id: Annotated[str, typer.Argument()]):
+    """In nội dung bộ kênh."""
+    typer.echo(json.dumps(load_preset(preset_id).model_dump(), ensure_ascii=False, indent=1))
+
+
+@_cmd(preset_app, "import")
+def preset_import(file: Annotated[Path, typer.Argument(help="Brief .docx hoặc .txt")],
+                  preset_id: Annotated[str, typer.Option("--id", help="id bộ kênh (chữ thường-gạch-ngang)")],
+                  force: Annotated[bool, typer.Option("--force", help="Ghi đè")] = False):
+    """Tạo bộ kênh từ brief (Claude trích câu neo nguyên văn, giọng đọc)."""
+    p = import_preset(file, preset_id=preset_id, force=force)
+    typer.echo(f"Đã tạo presets/{p.id}.yaml\n  neo đầu: {p.style_anchor_start}\n  neo cuối: {p.style_anchor_end}\n"
+               f"  giọng: {p.voice.name} — {p.voice.style}")
