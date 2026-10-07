@@ -5,14 +5,23 @@ import pytest
 from conftest import make_mp4
 from vidflow.errors import ScriptError, VidflowError
 from vidflow.inputs import video_hash
+from vidflow.frames import set_review
 from vidflow.manual import import_clip, import_inbox, pending_prompts, write_prompts_md
 from vidflow.state import Take
+
+def reviewed(project):
+    """Đánh dấu prompt các cảnh veo đã qua kiểm duyệt (prompt chỉ được gen khi kiểm duyệt đạt)."""
+    for sid in ("s01", "s02"):
+        set_review(project, sid, None, verdict="pass", score=8, issues=[], suggestion="")
+    return project
+
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="cần ffmpeg")
 
 
 def test_pending_prompts_only_approved_without_current_clip(project, cfg):
     (project.refs_dir / "an.png").write_bytes(b"img")
+    reviewed(project)
     items = pending_prompts(project, cfg)
     assert [i["id"] for i in items] == ["s01", "s02"]
     s01 = items[0]
@@ -28,6 +37,7 @@ def test_pending_prompts_only_approved_without_current_clip(project, cfg):
 
 
 def test_write_prompts_md(project, cfg):
+    reviewed(project)
     out = write_prompts_md(project, pending_prompts(project, cfg))
     text = out.read_text(encoding="utf-8")
     assert out == project.root / "prompts.md"
@@ -87,7 +97,7 @@ def test_prompts_md_shows_vietnamese_translation(project, cfg):
         '    veo_prompt: "Close-up of a young woman sipping coffee."',
         '    veo_prompt: "Close-up of a young woman sipping coffee."\n    veo_prompt_vi: "Cận cảnh cô gái nhấp cà phê."')
     project.script_path.write_text(text, encoding="utf-8")
-    items = pending_prompts(project, cfg)
+    items = pending_prompts(reviewed(project), cfg)
     assert items[0]["prompt_vi"] == "Cận cảnh cô gái nhấp cà phê."
     assert "Cận cảnh cô gái" not in items[0]["prompt"]
     md = write_prompts_md(project, items).read_text(encoding="utf-8")
@@ -95,10 +105,10 @@ def test_prompts_md_shows_vietnamese_translation(project, cfg):
 
 
 def test_prompts_include_flow_settings(project, cfg):
-    items = pending_prompts(project, cfg)
+    items = pending_prompts(reviewed(project), cfg)
     assert items[0]["flow_resolution"] == "720p" and items[0]["flow_video_model"] == ""
-    text = project.script_path.read_text(encoding="utf-8").replace(
-        "budget_usd: 10", 'budget_usd: 10\nflow: { video_model: "Veo 3.1 Fast", resolution: "1080p" }')
-    project.script_path.write_text(text, encoding="utf-8")
-    items = pending_prompts(project, cfg)
+    script = project.load_script()
+    script.flow.video_model, script.flow.resolution = "Veo 3.1 Fast", "1080p"
+    project.save_script(script)
+    items = pending_prompts(reviewed(project), cfg)
     assert items[0]["flow_video_model"] == "Veo 3.1 Fast" and items[0]["flow_resolution"] == "1080p"

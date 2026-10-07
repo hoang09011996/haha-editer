@@ -7,7 +7,7 @@ from typing import Callable
 
 from vidflow.config import Config
 from vidflow.errors import VidflowError
-from vidflow.inputs import compose_veo_prompt, scene_ref_images, video_hash
+from vidflow.inputs import compose_veo_prompt, review_ok, scene_ref_images, video_hash
 from vidflow.media import video_duration
 from vidflow.project import Project
 from vidflow.state import SceneState, Take
@@ -20,7 +20,9 @@ def pending_prompts(project: Project, cfg: Config) -> list[dict]:
     script, state = project.load_script(), project.load_state()
     items = []
     for scene in script.scenes:
-        if scene.status != "approved" or not scene.veo_prompt.strip():
+        if scene.mode != "veo" or scene.status != "approved" or not scene.veo_prompt.strip():
+            continue
+        if not review_ok(scene.review, compose_veo_prompt(script, scene)):
             continue
         h = video_hash(project, script, scene, cfg)
         st = state.scenes.get(scene.id) or SceneState()

@@ -188,11 +188,14 @@ def prompts(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json"
     """Xuất prompt các cảnh cần gen để làm trong Google Flow (ghi prompts.md)."""
     import json
 
+    from vidflow.frames import veo_blocked
     from vidflow.manual import pending_prompts, write_prompts_md
 
     p = Project.open(project)
     items = pending_prompts(p, load_config(config))
     out = write_prompts_md(p, items)
+    for b in veo_blocked(p):
+        typer.secho(f"  ⛔ {b['scene']}: {b['reason']}", fg=typer.colors.YELLOW, err=json_out)
     if json_out:
         typer.echo(json.dumps(items, ensure_ascii=False, indent=2))
     else:
@@ -279,3 +282,56 @@ def ui(projects: Annotated[Path, typer.Option("--projects", help="Thư mục ch�
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     serve(projects, port=port, config_path=config, password=password)
+
+
+@command
+def frames(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json", help="In JSON cho agent")] = False,
+           config: ConfigOpt = None):
+    """Liệt kê khung ảnh cần gen trong Google Flow (đã duyệt, đã qua kiểm duyệt, chưa có ảnh khớp prompt)."""
+    import json
+
+    from vidflow.frames import pending_frames
+
+    items, blocked = pending_frames(Project.open(project), load_config(config))
+    if json_out:
+        typer.echo(json.dumps({"frames": items, "blocked": blocked}, ensure_ascii=False, indent=2))
+        return
+    for i in items:
+        typer.echo(f"  {i['scene']}/{i['frame']} · {i['mode']} · {i['aspect']}")
+    for b in blocked:
+        typer.secho(f"  ⛔ {b['scene']}/{b['frame']}: {b['reason']}", fg=typer.colors.YELLOW)
+    typer.echo(f"{len(items)} khung cần gen, {len(blocked)} khung bị chặn")
+
+
+@command(name="import-frame")
+def import_frame_cmd(project: ProjectOpt, scene_id: Annotated[str, typer.Argument()], frame_id: Annotated[str, typer.Argument()],
+                     file: Annotated[Path, typer.Argument(help="Ảnh png/jpg/webp tải từ Flow")], config: ConfigOpt = None):
+    """Nhập ảnh tải từ Flow làm bản của khung."""
+    from vidflow.frames import import_frame
+
+    typer.echo(f"  ✓ {scene_id}/{frame_id} ← {import_frame(Project.open(project), load_config(config), scene_id, frame_id, file)}")
+
+
+@command(name="pick-frame")
+def pick_frame_cmd(project: ProjectOpt, scene_id: Annotated[str, typer.Argument()], frame_id: Annotated[str, typer.Argument()],
+                   n: Annotated[int, typer.Argument(help="Bản số (từ 1)")]):
+    """Chọn bản ảnh dùng cho khung."""
+    from vidflow.frames import pick_frame
+
+    typer.echo(f"{scene_id}/{frame_id} dùng {pick_frame(Project.open(project), scene_id, frame_id, n)}")
+
+
+@command(name="review-set")
+def review_set(project: ProjectOpt, scene_id: Annotated[str, typer.Argument()],
+               frame_id: Annotated[Optional[str], typer.Argument(help="Bỏ trống = prompt veo của cảnh")] = None,
+               verdict: Annotated[str, typer.Option(help="pass | fail | override")] = "pass",
+               score: Annotated[float, typer.Option(help="Điểm 0–10")] = 0,
+               issue: Annotated[Optional[list[str]], typer.Option("--issue", help="Vấn đề (lặp được)")] = None,
+               suggestion: Annotated[str, typer.Option(help="Gợi ý sửa")] = ""):
+    """Ghi kết quả kiểm duyệt cho prompt hiện tại (agent prompt-reviewer dùng)."""
+    from vidflow.frames import set_review
+
+    if verdict not in ("pass", "fail", "override"):
+        raise VidflowError("verdict phải là pass, fail hoặc override")
+    set_review(Project.open(project), scene_id, frame_id, verdict=verdict, score=score, issues=issue or [], suggestion=suggestion)
+    typer.echo(f"Đã ghi kiểm duyệt {scene_id}{'/' + frame_id if frame_id else ''}: {verdict} ({score:g}/10)")
