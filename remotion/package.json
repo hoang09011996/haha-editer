@@ -1,0 +1,18 @@
+{
+  "name": "vidflow-remotion",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts DoodleVideo"
+  },
+  "dependencies": {
+    "@remotion/cli": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}
