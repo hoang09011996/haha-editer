@@ -77,6 +77,33 @@ class FlowSettings(BaseModel):
     resolution: Literal["720p", "1080p"] = "720p"
 
 
+class Review(BaseModel):
+    """Kết quả agent kiểm duyệt prompt (hoặc người dùng bỏ qua kiểm duyệt)."""
+    verdict: Literal["pass", "fail", "override"]
+    score: float = Field(0, ge=0, le=10)
+    issues: list[str] = []
+    suggestion: str = ""
+    prompt_hash: str = ""
+
+
+Motion = Literal["zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down", "static"]
+MAX_FRAMES = 60
+
+
+class Frame(BaseModel):
+    """Một ảnh trong cảnh dựng từ ảnh."""
+    id: str = Field(pattern=r"^[a-z0-9_]+$")
+    description: str = ""  # tiếng Việt: trong khung có gì
+    prompt: str = ""  # prompt riêng của khung (AI viết)
+    seconds: float = Field(2.0, ge=0.5, le=10)
+    motion: Motion = "zoom_in"
+    caption: str = ""  # bong bóng thoại (comic)
+    status: Literal["draft", "approved"] = "draft"
+    locked: bool = False
+    review: Review | None = None
+    prompt_fields_hash: str = ""
+
+
 class Scene(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9_]+$")
     narration: str = ""
@@ -112,6 +139,30 @@ class Scene(BaseModel):
     locked: bool = False
     notes: str = ""
     prompt_fields_hash: str = ""  # hash các ô lúc veo_prompt được viết
+    # cảnh dựng từ ảnh
+    mode: Literal["veo", "slideshow", "stopmotion", "comic"] = "veo"
+    frames: list[Frame] = []
+    fps: int = Field(8, ge=6, le=12)
+    transition: Literal["cut", "fade", "slide"] = "fade"
+    review: Review | None = None  # kiểm duyệt veo_prompt
+
+    @model_validator(mode="after")
+    def _check_frames(self) -> "Scene":
+        ids = [f.id for f in self.frames]
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        if dup:
+            raise ValueError(f"scene {self.id}: id khung trùng {dup}")
+        if len(self.frames) > MAX_FRAMES:
+            raise ValueError(f"scene {self.id}: tối đa {MAX_FRAMES} khung")
+        if self.mode != "veo" and self.status == "approved" and not self.frames:
+            raise ValueError(f"scene {self.id}: cảnh {self.mode} cần ít nhất 1 khung")
+        return self
+
+    def frame(self, frame_id: str) -> Frame:
+        for f in self.frames:
+            if f.id == frame_id:
+                return f
+        raise ScriptError(f"Cảnh {self.id} không có khung '{frame_id}'")
 
 
 class Script(BaseModel):
@@ -127,6 +178,7 @@ class Script(BaseModel):
     subtitles: Subtitles = Subtitles()
     budget_usd: float = Field(20, gt=0)
     flow: FlowSettings = FlowSettings()
+    prompt_language: Literal["vi", "en"] = "vi"
     scenes: list[Scene] = []
 
     @model_validator(mode="after")

@@ -28,12 +28,27 @@ class PendingOp(BaseModel):
     submitted_at: str
 
 
+class ImageTake(BaseModel):
+    file: str
+    input_hash: str
+    created_at: str
+
+
+class FrameState(BaseModel):
+    images: list[ImageTake] = []
+    picked: int | None = None  # chỉ số 0-based trong images
+
+
 class SceneState(BaseModel):
     tts: TtsResult | None = None
     takes: list[Take] = []
     picked: int | None = None  # chỉ số 0-based trong takes
     pending: list[PendingOp] = []
     errors: list[str] = []
+    frames: dict[str, FrameState] = {}
+
+    def frame(self, frame_id: str) -> FrameState:
+        return self.frames.setdefault(frame_id, FrameState())
 
 
 class ProjectState(BaseModel):
