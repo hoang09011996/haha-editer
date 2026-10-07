@@ -113,7 +113,7 @@ const STEPS = [
     done: d => !!d.state?.draft_path },
 ];
 const STEP_JOBS = { idea: ["script", "✨ AI viết toàn bộ kịch bản chi tiết"], cast: ["script", "✨ AI điền nhân vật & bối cảnh"], story: ["script", "✨ AI viết/hoàn thiện các cảnh"],
-  shots: ["prompts", "✨ AI viết prompt chi tiết"], shots2: ["review", "🛡️ Kiểm duyệt prompt"], voice: ["tts", "🎙️ Tạo giọng đọc"], video: ["flow", "🎥 Gen video trong Flow"], build: ["build", "✂️ Dựng draft CapCut"] };
+  shots: ["prompts", "✨ AI viết prompt chi tiết"], voice: ["tts", "🎙️ Tạo giọng đọc"], video: ["flow", "🎥 Gen video trong Flow"], build: ["build", "✂️ Dựng draft CapCut"] };
 const TEMPLATES = [
   { icon: "☕", title: "Hài đời thường", idea: "Video hài 20s: anh chàng đeo kính, tóc rẽ ngôi, sáng dậy như zombie, thử cà phê sữa chua theo trend rồi tỉnh vì chua", style: "anim_3d", aspect: "9:16" },
   { icon: "🏪", title: "Review quán", idea: "Review 30s một quán cà phê nhỏ ở Hà Nội: không gian, món signature, cảm nhận ngụm đầu; tông ấm, chân thực", style: "live_action", aspect: "9:16" },
@@ -442,7 +442,7 @@ function modeBlock(sc) {
       sc.mode === "stopmotion" ? h("label", { class: "row" }, "fps", (() => { const i = h("input", { type: "number", min: 6, max: 12, style: "width:70px" }); i.value = sc.fps || 8; i.oninput = () => { sc.fps = Number(i.value); markDirty(); }; return i; })()) : null,
       sc.mode === "slideshow" ? h("select", { onchange: e => { sc.transition = e.target.value; markDirty(); } }, [["fade", "Chuyển: mờ dần"], ["slide", "Chuyển: trượt"], ["cut", "Chuyển: cắt"]].map(([v, l]) => h("option", { value: v, selected: (sc.transition || "fade") === v }, l))) : null) : null));
   if (sc.mode === "veo") return box;
-  const add = () => { const n = sc.frames.length + 1; sc.frames.push({ id: "f" + String(n).padStart(2, "0"), description: "", prompt: "", seconds: sc.mode === "stopmotion" ? 1 : 2, motion: sc.mode === "stopmotion" ? "static" : "zoom_in", caption: "", status: "draft" }); markDirty(); render(); };
+  const add = () => { let n = sc.frames.length + 1; while (sc.frames.some(f => f.id === "f" + String(n).padStart(2, "0"))) n++; sc.frames.push({ id: "f" + String(n).padStart(2, "0"), description: "", prompt: "", seconds: sc.mode === "stopmotion" ? 1 : 2, motion: sc.mode === "stopmotion" ? "static" : "zoom_in", caption: "", status: "draft" }); markDirty(); render(); };
   const allOk = sc.frames.length && sc.frames.every(f => f.status === "approved");
   box.append(h("div", { class: "row", style: "margin:8px 0" }, h("button", { class: "small", onclick: add }, "+ Thêm khung"),
     h("button", { class: "small", onclick: () => { sc.frames.forEach(f => (f.status = allOk ? "draft" : "approved")); markDirty(); render(); } }, allOk ? "Bỏ duyệt khung" : "✓ Duyệt mọi khung"),
@@ -462,7 +462,8 @@ function frameCard(sc, f, i) {
     img ? h("img", { class: "thumb", src: media(img) }) : null,
     F("Trong khung có gì", f, "description", { type: "textarea", scene: sc.id, help: "description", chips: false }),
     sc.mode === "comic" ? F("Bong bóng thoại", f, "caption", { scene: sc.id, help: "caption", chips: false }) : null,
-    sc.mode !== "stopmotion" ? h("div", { class: "row" }, F("Giây", f, "seconds", { type: "number" }), F("Chuyển động", f, "motion", { type: "select", options: MOTIONS })) : null);
+    h("div", { class: "row" }, F(sc.mode === "stopmotion" ? "Giây (tổng = độ dài tối thiểu, ảnh lặp)" : "Giây", f, "seconds", { type: "number" }),
+      sc.mode !== "stopmotion" ? F("Chuyển động", f, "motion", { type: "select", options: MOTIONS }) : null));
 }
 function pickedImage(sid, fid) {
   const fs = (S.data.state.scenes?.[sid]?.frames || {})[fid];

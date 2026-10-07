@@ -151,7 +151,7 @@ def plan_timeline(script: Script, state: ProjectState, clip_durations: dict[str,
                 skipped[scene.id] = "chưa có voice-over"
                 continue
             voice_len = floor_ms(st.tts.duration_s / script.voice.speed) if has_voice else 0.0
-            base = len(frames) / scene.fps if scene.mode == "stopmotion" else sum(f.seconds for f in frames)
+            base = sum(f.seconds for f in frames)  # stop-motion: tổng seconds là độ dài tối thiểu, chuỗi ảnh lặp cho đủ
             length = round(max(base, voice_len + pad if has_voice else 0.0), 3)
             start, end = round(t, 3), round(t + length, 3)
             subs = _subtitles(scene.narration, script.subtitles.max_chars_per_line, start, voice_len) \

@@ -124,7 +124,7 @@ def test_slide_and_cut_transitions(project, cfg):
 
 
 def test_stopmotion_loops_eighth_second_frames(project, cfg):
-    script, state = prepare(project, [image_scene("stopmotion", 4, fps=8)], voice_s=2.0)
+    script, state = prepare(project, [image_scene("stopmotion", 4, fps=8, seconds=0.5)], voice_s=2.0)
     _, content = build(project, cfg, script, state)
     segs = video_segs(content)
     assert len(segs) >= 18

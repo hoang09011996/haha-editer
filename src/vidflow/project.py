@@ -16,6 +16,7 @@ REF_EXTS = (".png", ".jpg", ".jpeg")
 TEMPLATE = """\
 title: "{title}"
 aspect: "{aspect}"
+prompt_language: vi
 style: ""
 characters: []
 voice: {{ name: "Kore", style: "", speed: 1.0 }}
@@ -66,6 +67,8 @@ class Project:
             data = yaml.safe_load(self.script_path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
             raise ScriptError(f"script.yaml sai cú pháp YAML: {e}") from e
+        if isinstance(data, dict) and "prompt_language" not in data:
+            data["prompt_language"] = "en"  # script tạo trước khi có prompt tiếng Việt: giữ tiếng Anh, tránh làm cũ clip
         try:
             return Script.model_validate(data)
         except ValidationError as e:
@@ -74,6 +77,7 @@ class Project:
     def save_script(self, script: Script) -> None:
         data = script.model_dump(mode="json", exclude_defaults=True)
         data.setdefault("title", script.title)
+        data["prompt_language"] = script.prompt_language
         atomic_write_text(self.script_path, yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=1000))
 
     def load_state(self) -> ProjectState:

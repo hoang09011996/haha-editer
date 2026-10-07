@@ -72,7 +72,7 @@ def test_slideshow_without_narration(project):
 
 
 def test_stopmotion_loops_frames_at_fps(project):
-    scene = image_scene("stopmotion", 4, fps=8)
+    scene = image_scene("stopmotion", 4, fps=8, seconds=0.5)
     script, state = setup(project, scene, voice_s=2.0)
     (p,) = plan_timeline(script, state, {}).scenes
     assert p.end == pytest.approx(2.3)
@@ -85,10 +85,11 @@ def test_stopmotion_loops_frames_at_fps(project):
 
 
 def test_stopmotion_no_voice_plays_sequence_once(project):
-    scene = image_scene("stopmotion", 4, fps=8, narration="")
+    scene = image_scene("stopmotion", 4, fps=8, seconds=0.5, narration="")
     script, state = setup(project, scene, voice_s=None)
     (p,) = plan_timeline(script, state, {}).scenes
-    assert p.end == pytest.approx(0.5) and len(p.images) == 4
+    # không lời dẫn: độ dài = tổng seconds (4×0.5s), chuỗi 4 ảnh lặp ở 8fps
+    assert p.end == pytest.approx(2.0) and len(p.images) == 16
 
 
 def test_comic_carries_captions(project):

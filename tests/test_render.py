@@ -75,9 +75,10 @@ def test_stopmotion_loops(project, cfg, tmp_path):
     make(project, cfg, tmp_path, "stopmotion", n=4, voice=2.0, extra="    fps: 8\n")
     script, state = project.load_script(), project.load_state()
     durs = planned_durations(script, state, script.scenes[0])
-    assert sum(durs) == pytest.approx(2.3, abs=1e-6) and len(durs) >= 18 and durs[0] == pytest.approx(0.125)
+    # độ dài = max(tổng seconds 4×1.0, giọng 2.0+0.3) = 4.0; mỗi ảnh 1/8s, lặp chuỗi
+    assert sum(durs) == pytest.approx(4.0, abs=1e-6) and len(durs) == 32 and durs[0] == pytest.approx(0.125)
     run_render(project, cfg, now=lambda: "T")
-    assert probe_duration(project.root / "clips/s01_r1.mp4") == pytest.approx(2.3, abs=0.08)
+    assert probe_duration(project.root / "clips/s01_r1.mp4") == pytest.approx(4.0, abs=0.08)
 
 
 def test_comic_has_white_bubble(project, cfg, tmp_path):

@@ -10,6 +10,7 @@ from vidflow.project import create_project
 SAMPLE = """\
 title: "Buổi sáng của An"
 aspect: "9:16"
+prompt_language: vi
 style: "cinematic, warm tone"
 characters:
   - id: an

@@ -26,15 +26,16 @@ FONT_SIZE = {"9:16": 56, "16:9": 48}
 WRAP = {"9:16": 22, "16:9": 40}
 
 
-def _picked(state: ProjectState, scene: Scene) -> tuple[list[tuple[Frame, str]], list[str]]:
-    """(khung đã duyệt có ảnh chọn, id khung đã duyệt thiếu ảnh)."""
+def _picked(state: ProjectState, scene: Scene, project: Project | None = None) -> tuple[list[tuple[Frame, str]], list[str]]:
+    """(khung đã duyệt có ảnh chọn, id khung đã duyệt thiếu ảnh). Có project → ảnh đã bị xóa khỏi đĩa tính là thiếu."""
     st = state.scenes.get(scene.id) or SceneState()
     ok, missing = [], []
     for f in scene.frames:
         if f.status != "approved":
             continue
         fs = st.frames.get(f.id)
-        if fs is None or fs.picked is None:
+        if (fs is None or fs.picked is None or not 0 <= fs.picked < len(fs.images)
+                or (project is not None and not project.path(fs.images[fs.picked].file).is_file())):
             missing.append(f.id)
         else:
             ok.append((f, fs.images[fs.picked].file))
@@ -56,7 +57,7 @@ def planned_durations(script: Script, state: ProjectState, scene: Scene) -> list
     voice = _voice_target(script, state, scene)
     if scene.mode == "stopmotion":
         step = 1 / scene.fps
-        target = max(len(frames) * step, voice)
+        target = max(sum(f.seconds for f in frames), voice)
         n = math.ceil(round(target / step, 6))
         durs = [step] * n
         durs[-1] = round(target - step * (n - 1), 6)
@@ -67,7 +68,7 @@ def planned_durations(script: Script, state: ProjectState, scene: Scene) -> list
 
 
 def render_hash(project: Project, script: Script, state: ProjectState, scene: Scene) -> str | None:
-    picked, missing = _picked(state, scene)
+    picked, missing = _picked(state, scene, project)
     if missing or not picked:
         return None
     return _digest({
@@ -202,7 +203,7 @@ def run_render(project: Project, cfg: Config, *, scene_ids: list[str] | None = N
         if scene.assemble == "capcut":
             skipped[scene.id] = "ghép từng ảnh trong CapCut (không render)"
             continue
-        picked, missing = _picked(state, scene)
+        picked, missing = _picked(state, scene, project)
         if missing or not picked:
             skipped[scene.id] = f"thiếu ảnh khung {', '.join(missing)}" if missing else "chưa có khung đã duyệt"
             continue
