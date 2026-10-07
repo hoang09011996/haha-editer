@@ -15,7 +15,7 @@ def test_defaults():
     s = Script.model_validate(sc())
     assert s.prompt_language == "vi"
     x = s.scenes[0]
-    assert x.mode == "veo" and x.fps == 8 and x.transition == "fade" and x.frames == []
+    assert x.assemble == "ffmpeg" and x.mode == "veo" and x.fps == 8 and x.transition == "fade" and x.frames == []
 
 
 def test_frames_parse():

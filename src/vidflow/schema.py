@@ -144,6 +144,7 @@ class Scene(BaseModel):
     frames: list[Frame] = []
     fps: int = Field(8, ge=6, le=12)
     transition: Literal["cut", "fade", "slide"] = "fade"
+    assemble: Literal["ffmpeg", "capcut"] = "ffmpeg"  # cảnh ảnh: render mp4 bằng ffmpeg, hay ghép từng ảnh trong draft CapCut
     review: Review | None = None  # kiểm duyệt veo_prompt
 
     @model_validator(mode="after")
