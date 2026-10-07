@@ -374,3 +374,10 @@ def assemble(images: Annotated[Path, typer.Option("--images", help="Thư mục �
         typer.secho(f"  ! {w}", fg=typer.colors.YELLOW)
     typer.echo(f"Đã dựng {rep.count} ảnh, {rep.total_s:.1f}s trong {time.perf_counter() - t0:.1f}s → {rep.draft_dir}. "
                "Mở CapCut để xem.")
+
+
+# ---- Quy trình nhanh (spec 2026-10-07) ----
+from vidflow.quick.cli import preset_app, quick_app  # noqa: E402
+
+app.add_typer(quick_app, name="quick")
+app.add_typer(preset_app, name="preset")

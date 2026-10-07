@@ -1,0 +1,12 @@
+# Bộ kênh "Giải mã bản thân" — doodle 2D giải thích tâm lý & khoa học con người.
+# Câu neo trích NGUYÊN VĂN từ samples/doodle-brief.txt (Giai đoạn 3, quy tắc image prompt 3 và 4).
+id: doodle-giai-ma
+name: "Giải mã bản thân — doodle tâm lý & khoa học"
+brief_file: samples/doodle-brief.txt
+aspect: "16:9"
+language: vi
+style_anchor_start: "Hand-drawn 2D doodle cartoon animation, flat solid colors, bold black hand-drawn outlines, slightly wobbly imperfect marker lines,"
+style_anchor_end: "no gradients, no drop shadows, no photographic textures, no photorealism, no 3D render, no realistic faces, no anime, no flags or logos, 16:9 widescreen, simple educational YouTube explainer doodle style."
+voice:
+  name: Charon
+  style: "Người dẫn chuyện khoa học: giọng điềm tĩnh, thông minh, ấm áp, hài hước nhẹ và hơi tự trào; nhịp vừa phải, ngắt hơi rõ sau câu ngắn, nhấn nhẹ vào câu hỏi tu từ."

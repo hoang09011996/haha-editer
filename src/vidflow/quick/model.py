@@ -1,0 +1,126 @@
+"""Mô hình dữ liệu project nhanh: quick.yaml + beats.json (hợp đồng với bước 6 `assemble`)."""
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from typing import Literal
+
+import yaml
+from pydantic import BaseModel, ValidationError
+
+from vidflow.errors import VidflowError
+from vidflow.state import atomic_write_text
+
+QUICK_FILE = "quick.yaml"
+BEATS_FILE = "beats.json"
+SUBDIRS = ("images", "audio", "audio/beats", "logs", "tmp")
+Stage = Literal["new", "ideas", "picked", "script", "voiced", "prompted", "imaged", "built"]
+STAGES: tuple[str, ...] = Stage.__args__
+
+
+class Idea(BaseModel):
+    title: str
+    hook: str = ""
+    why_viral: str = ""
+
+
+class QuickProject(BaseModel):
+    preset: str
+    title: str = ""
+    ideas: list[Idea] = []
+    picked: int | None = None  # 1-based
+    stage: Stage = "new"
+
+    def picked_idea(self) -> Idea | None:
+        if self.picked and 1 <= self.picked <= len(self.ideas):
+            return self.ideas[self.picked - 1]
+        return None
+
+
+class Review(BaseModel):
+    verdict: Literal["pass", "fail", "override"]
+    score: float = 0
+    issues: list[str] = []
+
+
+class Beat(BaseModel):
+    n: int
+    start: float | None = None
+    end: float | None = None
+    text: str
+    prompt: str = ""
+    image: str | None = None
+    review: Review | None = None
+    status: Literal["pending", "ok", "redo"] = "pending"
+
+
+class Beats(BaseModel):
+    aspect: str = "16:9"
+    beats: list[Beat] = []
+
+    def get(self, n: int) -> Beat:
+        for b in self.beats:
+            if b.n == n:
+                return b
+        raise VidflowError(f"Không có mốc {n} (có {len(self.beats)} mốc).")
+
+    @property
+    def timed(self) -> bool:
+        return bool(self.beats) and all(b.start is not None and b.end is not None for b in self.beats)
+
+
+def image_name(n: int, start: float) -> str:
+    """`NNN_MM-SS` — NNN 3 chữ số, MM-SS = mốc bắt đầu làm tròn xuống giây."""
+    secs = int(math.floor(round(start, 6)))
+    return f"{n:03d}_{secs // 60:02d}-{secs % 60:02d}"
+
+
+def create_quick(root: Path, *, preset: str, title: str = "") -> QuickProject:
+    root = Path(root)
+    if (root / QUICK_FILE).exists():
+        raise VidflowError(f"{root / QUICK_FILE} đã tồn tại.")
+    for d in SUBDIRS:
+        (root / d).mkdir(parents=True, exist_ok=True)
+    q = QuickProject(preset=preset, title=title)
+    save_quick(root, q)
+    return q
+
+
+def is_quick(root: Path) -> bool:
+    return (Path(root) / QUICK_FILE).is_file()
+
+
+def load_quick(root: Path) -> QuickProject:
+    path = Path(root) / QUICK_FILE
+    if not path.is_file():
+        raise VidflowError(f"Không thấy {path} — tạo bằng `vidflow quick new`.")
+    try:
+        return QuickProject.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    except ValidationError as e:
+        raise VidflowError(f"{path} không hợp lệ: {e}") from e
+
+
+def save_quick(root: Path, q: QuickProject) -> None:
+    atomic_write_text(Path(root) / QUICK_FILE,
+                      yaml.safe_dump(q.model_dump(), allow_unicode=True, sort_keys=False, width=1000))
+
+
+def load_beats(root: Path) -> Beats | None:
+    path = Path(root) / BEATS_FILE
+    if not path.is_file():
+        return None
+    try:
+        return Beats.model_validate_json(path.read_text(encoding="utf-8"))
+    except ValidationError as e:
+        raise VidflowError(f"{path} không hợp lệ: {e}") from e
+
+
+def require_beats(root: Path) -> Beats:
+    b = load_beats(root)
+    if b is None or not b.beats:
+        raise VidflowError("Chưa có beats.json — chạy `vidflow quick script` trước.")
+    return b
+
+
+def save_beats(root: Path, beats: Beats) -> None:
+    atomic_write_text(Path(root) / BEATS_FILE, beats.model_dump_json(indent=1))
