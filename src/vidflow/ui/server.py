@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from vidflow.config import load_config
 from vidflow.errors import VidflowError
+from vidflow.frames import pending_frames, pick_frame, set_review, veo_blocked
 from vidflow.inputs import scene_fields_hash
 from vidflow.project import Project, create_project
 from vidflow.schema import FlowSettings, Script
@@ -20,7 +21,7 @@ from vidflow.ui.jobs import KINDS, JobRunner
 from vidflow.ui.suggest import Suggester
 
 STATIC = Path(__file__).parent / "static"
-MEDIA_DIRS = ("audio", "clips", "refs", "music", "inbox")
+MEDIA_DIRS = ("audio", "clips", "refs", "music", "inbox", "frames")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 
 
@@ -37,6 +38,17 @@ class JobRequest(BaseModel):
     kind: str
     scenes: list[str] | None = None
     instruction: str = ""
+
+
+class PickFrameRequest(BaseModel):
+    scene: str
+    frame: str
+    n: int
+
+
+class OverrideRequest(BaseModel):
+    scene: str
+    frame: str | None = None
 
 
 class SuggestRequest(BaseModel):
@@ -122,6 +134,11 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
             status = scene_rows(p, script, state, cfg)
         except VidflowError as e:
             status = [{"id": "-", "error": str(e)}]
+        try:
+            frames_pending, frames_blocked = pending_frames(p, cfg)
+            blocked = veo_blocked(p) + frames_blocked
+        except VidflowError:
+            frames_pending, blocked = [], []
         refs = sorted(f.name for f in p.refs_dir.iterdir() if f.is_file()) if p.refs_dir.is_dir() else []
         job = runner.current.to_dict(tail=4000) if runner.current and runner.current.project == name else None
         return {
@@ -133,6 +150,8 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
                              for s in script.scenes},
             "refs": refs,
             "job": job,
+            "frames_pending": frames_pending,
+            "blocked": blocked,
         }
 
     @app.put("/api/projects/{name}/script")
@@ -152,6 +171,22 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
             return {"file": pick_take(open_project(name), req.scene, req.take)}
         except VidflowError as e:
             raise HTTPException(422, str(e))
+
+    @app.post("/api/projects/{name}/pick-frame")
+    def pick_frame_ep(name: str, req: PickFrameRequest):
+        try:
+            return {"file": pick_frame(open_project(name), req.scene, req.frame, req.n)}
+        except VidflowError as e:
+            raise HTTPException(422, str(e))
+
+    @app.post("/api/projects/{name}/review-override")
+    def review_override(name: str, req: OverrideRequest):
+        try:
+            set_review(open_project(name), req.scene, req.frame, verdict="override", score=0,
+                       issues=["người dùng bỏ qua kiểm duyệt"], suggestion="")
+        except VidflowError as e:
+            raise HTTPException(422, str(e))
+        return {"ok": True}
 
     @app.post("/api/projects/{name}/jobs", status_code=202)
     def start_job(name: str, req: JobRequest):

@@ -11,8 +11,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 AGENTS = REPO / ".claude" / "agents"
 
-CLI_KINDS = {"tts": "tts", "export_prompts": "prompts", "build": "build"}
-CLAUDE_KINDS = ("script", "prompts", "refimg", "flow", "assist")
+CLI_KINDS = {"tts": "tts", "export_prompts": "prompts", "build": "build", "render": "render"}
+CLAUDE_KINDS = ("script", "prompts", "refimg", "flow", "assist", "review", "frames_flow")
 KINDS = tuple(CLI_KINDS) + CLAUDE_KINDS
 
 LABELS = {
@@ -24,6 +24,9 @@ LABELS = {
     "export_prompts": "Xuất prompts.md",
     "build": "Dựng draft CapCut",
     "assist": "AI sửa theo yêu cầu",
+    "review": "Kiểm duyệt prompt",
+    "frames_flow": "Gen ảnh khung trong Google Flow",
+    "render": "Render cảnh ảnh (ffmpeg)",
 }
 
 
@@ -51,6 +54,15 @@ def _claude_task(kind: str, project_root: Path, scenes: list[str] | None, instru
         return (f"Bạn là flow-operator. Đọc và tuân thủ {AGENTS / 'flow-operator.md'}. {common} "
                 "Gen video trong Google Flow cho các cảnh `uv run vidflow prompts -p ... --json` liệt kê, tải về, "
                 f"import từng cảnh, rồi chạy `uv run vidflow preview -p {rel}`.{only}")
+    if kind == "review":
+        return (f"Bạn là prompt-reviewer, KHÔNG phải người viết prompt. Đọc và tuân thủ {AGENTS / 'prompt-reviewer.md'}. "
+                f"{common} Kiểm duyệt mọi prompt cảnh veo và khung ảnh đã duyệt đang 'chưa kiểm duyệt' hoặc 'kiểm duyệt cũ' "
+                f"(xem `uv run vidflow frames -p {rel}` và `uv run vidflow prompts -p {rel}`), ghi kết quả bằng "
+                f"`uv run vidflow review-set`.{only} Không sửa prompt.")
+    if kind == "frames_flow":
+        return (f"Bạn là flow-operator. Đọc và tuân thủ {AGENTS / 'flow-operator.md'} (phần Ảnh khung). {common} "
+                f"Lấy danh sách bằng `uv run vidflow frames -p {rel} --json`, gen từng ảnh khung trong Google Flow, tải về và "
+                f"`uv run vidflow import-frame -p {rel} <scene> <frame> <file>`. Không gen video.{only}")
     if kind == "assist":
         if not instruction.strip():
             raise ValueError("Cần nội dung yêu cầu cho AI")
@@ -69,7 +81,7 @@ def build_job_cmd(kind: str, project_root: Path, scenes: list[str] | None, instr
         return cmd
     if kind in CLAUDE_KINDS:
         cmd = ["claude", "-p", "--permission-mode", "bypassPermissions"]
-        if kind in ("refimg", "flow"):
+        if kind in ("refimg", "flow", "frames_flow"):
             cmd.append("--chrome")
         return cmd + [_claude_task(kind, project_root, scenes, instruction)]
     raise ValueError(f"Không hỗ trợ việc '{kind}'")
