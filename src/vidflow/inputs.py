@@ -7,7 +7,7 @@ from pathlib import Path
 from vidflow.config import Config
 from vidflow.errors import ScriptError
 from vidflow.project import Project
-from vidflow.schema import Scene, Script
+from vidflow.schema import Frame, Review, Scene, Script
 
 SCENE_PAD_S = 0.3
 MIN_CLIP_SPEED = 0.8
@@ -23,20 +23,55 @@ def _file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def compose_veo_prompt(script: Script, scene: Scene) -> str:
+LABELS = {
+    "vi": {"style": "Phong cách", "mute": "Không thoại, không lời dẫn, không nhạc.",
+           "still": "Ảnh tĩnh, một khoảnh khắc, không chữ, không watermark.",
+           "bubble": "Bố cục chừa khoảng trống phía trên cho bong bóng thoại."},
+    "en": {"style": "Style", "mute": "No dialogue, no narration, no music.",
+           "still": "Still image, a single moment, no text, no watermark.",
+           "bubble": "Leave empty space at the top for a speech bubble."},
+}
+
+
+def _common_parts(script: Script, scene: Scene) -> list[str]:
+    lab = LABELS[script.prompt_language]
     parts: list[str] = []
     if script.style:
-        parts.append(f"Style: {script.style}.")
+        parts.append(f"{lab['style']}: {script.style}.")
     for cid in scene.characters:
         parts.append(f"{cid}: {script.character(cid).description}.")
     for pid in scene.props:
         prop = script.prop(pid)
         if prop.description:
             parts.append(f"{prop.name or pid}: {prop.description}.")
+    return parts
+
+
+def compose_veo_prompt(script: Script, scene: Scene) -> str:
+    parts = _common_parts(script, scene)
     parts.append(scene.veo_prompt.strip())
     if not scene.veo_audio:
-        parts.append("No dialogue, no narration, no music.")
+        parts.append(LABELS[script.prompt_language]["mute"])
     return " ".join(parts)
+
+
+def compose_frame_prompt(script: Script, scene: Scene, frame: Frame) -> str:
+    lab = LABELS[script.prompt_language]
+    parts = _common_parts(script, scene)
+    parts.append(frame.prompt.strip())
+    parts.append(lab["still"])
+    if scene.mode == "comic":
+        parts.append(lab["bubble"])
+    return " ".join(parts)
+
+
+def prompt_text_hash(text: str) -> str:
+    return _digest({"prompt": text.strip()})
+
+
+def review_ok(review: Review | None, text: str) -> bool:
+    """Prompt chỉ được gen khi kiểm duyệt đạt (hoặc người dùng bỏ qua) cho đúng nội dung hiện tại."""
+    return review is not None and review.verdict in ("pass", "override") and review.prompt_hash == prompt_text_hash(text)
 
 
 def scene_ref_images(project: Project, script: Script, scene: Scene) -> list[Path]:
@@ -62,7 +97,8 @@ def video_hash(project: Project, script: Script, scene: Scene, cfg: Config) -> s
     })
 
 
-PROMPT_EXCLUDED = {"veo_prompt", "veo_prompt_vi", "status", "locked", "notes", "prompt_fields_hash", "narration"}
+PROMPT_EXCLUDED = {"veo_prompt", "veo_prompt_vi", "status", "locked", "notes", "prompt_fields_hash", "narration",
+                   "frames", "review"}
 
 
 def scene_fields_hash(script: Script, scene: Scene) -> str:
@@ -74,4 +110,13 @@ def scene_fields_hash(script: Script, scene: Scene) -> str:
         "characters": [c.model_dump(exclude={"ref_image", "description"}) for c in script.characters if c.id in scene.characters],
         "location": loc,
         "props": [p.model_dump() for p in script.props if p.id in scene.props],
+    })
+
+
+def frame_input_hash(project: Project, script: Script, scene: Scene, frame: Frame) -> str:
+    """Hash đầu vào của một ảnh khung: prompt ghép + ảnh tham chiếu + tỉ lệ khung hình."""
+    return _digest({
+        "prompt": compose_frame_prompt(script, scene, frame),
+        "aspect": script.aspect,
+        "refs": [_file_digest(p) for p in scene_ref_images(project, script, scene)],
     })

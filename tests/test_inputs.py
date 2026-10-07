@@ -7,16 +7,16 @@ from vidflow.inputs import compose_veo_prompt, scene_ref_images, tts_hash, video
 def test_compose_prompt_includes_style_character_and_mute(project):
     script = project.load_script()
     p = compose_veo_prompt(script, script.scene("s01"))
-    assert p.startswith("Style: cinematic, warm tone.")
+    assert p.startswith("Phong cách: cinematic, warm tone.")
     assert "an: cô gái 25 tuổi" in p
     assert "Close-up of a young woman sipping coffee." in p
-    assert p.endswith("No dialogue, no narration, no music.")
+    assert p.endswith("Không thoại, không lời dẫn, không nhạc.")
 
 
 def test_compose_prompt_keeps_audio_when_enabled(project):
     script = project.load_script()
     scene = script.scene("s02").model_copy(update={"veo_audio": True})
-    assert "No dialogue" not in compose_veo_prompt(script, scene)
+    assert "Không thoại" not in compose_veo_prompt(script, scene)
 
 
 def test_tts_hash_changes_with_text_and_voice(project, cfg):

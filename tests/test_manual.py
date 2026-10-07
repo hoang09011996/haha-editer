@@ -17,7 +17,7 @@ def test_pending_prompts_only_approved_without_current_clip(project, cfg):
     assert [i["id"] for i in items] == ["s01", "s02"]
     s01 = items[0]
     assert s01["aspect"] == "9:16" and s01["duration"] == 8
-    assert s01["prompt"].startswith("Style: cinematic, warm tone.")
+    assert s01["prompt"].startswith("Phong cách: cinematic, warm tone.")
     assert s01["ref_images"] == [str(project.refs_dir / "an.png")]
     script = project.load_script()
     state = project.load_state()
