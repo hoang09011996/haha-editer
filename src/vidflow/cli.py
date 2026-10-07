@@ -335,3 +335,17 @@ def review_set(project: ProjectOpt, scene_id: Annotated[str, typer.Argument()],
         raise VidflowError("verdict phải là pass, fail hoặc override")
     set_review(Project.open(project), scene_id, frame_id, verdict=verdict, score=score, issues=issue or [], suggestion=suggestion)
     typer.echo(f"Đã ghi kiểm duyệt {scene_id}{'/' + frame_id if frame_id else ''}: {verdict} ({score:g}/10)")
+
+
+@command
+def render(project: ProjectOpt, scene: ScenesOpt = None, config: ConfigOpt = None):
+    """Ghép ảnh đã chọn của cảnh slideshow/stopmotion/comic thành clip (ffmpeg)."""
+    from vidflow.render import run_render
+
+    rep = run_render(Project.open(project), load_config(config), scene_ids=scene)
+    for f in rep["created"]:
+        typer.echo(f"  ✓ {f}")
+    for sid, why in rep["skipped"].items():
+        typer.secho(f"  bỏ qua {sid}: {why}", fg=typer.colors.YELLOW)
+    if not rep["created"] and not rep["skipped"]:
+        typer.echo("Không có cảnh ảnh nào cần render lại.")
