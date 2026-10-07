@@ -1195,6 +1195,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "google-genai" },
+    { name = "pillow" },
     { name = "pycapcut" },
     { name = "pydantic" },
     { name = "python-multipart" },
@@ -1213,6 +1214,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "google-genai", specifier = ">=1.0" },
+    { name = "pillow", specifier = ">=12.3.0" },
     { name = "pycapcut", git = "https://github.com/GuanYixuan/pyCapCut?rev=3e8209add858588e3a29216f5f8e76089559130b" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "python-multipart", specifier = ">=0.0.32" },

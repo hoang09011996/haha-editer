@@ -10,7 +10,7 @@ DEFAULT_DRAFT_FOLDER = Path.home() / "Movies" / "CapCut" / "User Data" / "Projec
 # CapCut macOS bị sandbox, chỉ đọc được ~/Movies → media dựng draft phải nằm dưới đây
 DEFAULT_MEDIA_FOLDER = Path.home() / "Movies" / "vidflow_media"
 RESOLUTIONS = ("720p", "1080p", "4k")
-PATH_KEYS = ("draft_folder", "media_folder")
+PATH_KEYS = ("draft_folder", "media_folder", "comic_font")
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ class Config:
     image_model: str | None = None
     draft_folder: Path = DEFAULT_DRAFT_FOLDER
     media_folder: Path = DEFAULT_MEDIA_FOLDER
+    comic_font: Path = Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
 
 
 def load_config(path: Path | None = None) -> Config:

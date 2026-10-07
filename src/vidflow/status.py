@@ -3,6 +3,7 @@ from __future__ import annotations
 from vidflow.config import Config
 from vidflow.inputs import tts_hash, video_hash
 from vidflow.project import Project
+from vidflow.render import render_hash
 from vidflow.schema import Script
 from vidflow.state import ProjectState, SceneState
 
@@ -17,10 +18,13 @@ def scene_rows(project: Project, script: Script, state: ProjectState, cfg: Confi
             tts = "thiếu"
         else:
             tts = "ok" if st.tts.input_hash == tts_hash(script, scene, cfg) else "cũ"
-        if st.picked is None:
+        if scene.mode != "veo" and scene.assemble == "capcut":
+            clip = "ok" if render_hash(project, script, state, scene) else "thiếu ảnh"
+        elif st.picked is None:
             clip = "thiếu"
         else:
-            clip = "ok" if st.takes[st.picked].input_hash == video_hash(project, script, scene, cfg) else "cũ"
+            want = render_hash(project, script, state, scene) if scene.mode != "veo" else video_hash(project, script, scene, cfg)
+            clip = "ok" if st.takes[st.picked].input_hash == want else "cũ"
         rows.append({
             "id": scene.id, "status": scene.status, "tts": tts, "takes": str(len(st.takes)),
             "picked": f"t{st.picked + 1}" if st.picked is not None else "-", "clip": clip,
