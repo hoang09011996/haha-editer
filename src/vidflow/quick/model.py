@@ -26,6 +26,8 @@ VIDEO_EXTS = {".mp4": ".mp4", ".mov": ".mov", ".webm": ".webm"}
 CHAR_ID = r"^[A-Z][A-Z0-9_]{1,23}$"
 PROVIDERS = ("flow", "gemini", "aistudio")
 Provider = Literal["flow", "gemini", "aistudio"]
+VoiceMode = Literal["per_beat", "chunk", "full"]
+VOICE_MODES: tuple[str, ...] = VoiceMode.__args__
 Stage = Literal["new", "ideas", "picked", "script", "voiced", "prompted", "imaged", "built"]
 STAGES: tuple[str, ...] = Stage.__args__
 
@@ -72,6 +74,7 @@ class QuickProject(BaseModel):
     max_clips: int = Field(default=12, ge=0)
     allow_cont: bool = True
     limits: list[LimitHit] = []
+    voice_mode: VoiceMode = "chunk"  # per_beat = mỗi câu một lượt TTS; chunk = ~20 câu/lượt; full = cả bài một lượt
 
     def picked_idea(self) -> Idea | None:
         if self.picked and 1 <= self.picked <= len(self.ideas):

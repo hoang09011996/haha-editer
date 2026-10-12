@@ -23,6 +23,11 @@ def gemini_client():
     return genai.Client(http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS))
 
 
+def tts_deadline(text: str) -> float:
+    """Hạn chót một lượt TTS: 90 giây, đoạn dài (đọc theo đoạn/cả bài) thêm thời gian theo số ký tự."""
+    return max(HTTP_TIMEOUT_MS / 1000, 0.15 * len(text))
+
+
 class GeminiSpeechClient:
     def __init__(self, client=None):
         self._c = client or gemini_client()
@@ -37,7 +42,7 @@ class GeminiSpeechClient:
             input=[{"type": "user_input", "content": [content]}],
             response_format={"type": "audio"},
             generation_config={"speech_config": [{"voice": voice}]},
-        ), HTTP_TIMEOUT_MS / 1000)
+        ), tts_deadline(text))
         return base64.b64decode(it.output_audio.data)
 
 

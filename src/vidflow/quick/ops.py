@@ -8,7 +8,7 @@ from pathlib import Path
 from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
 from vidflow.quick.chars import CharRef, check_known, lookup, parse_refs
-from vidflow.quick.model import (IMAGE_EXTS, PROVIDERS, STAGES, Beat, Beats, Idea, LimitHit, QuickProject, Review, image_name,
+from vidflow.quick.model import (IMAGE_EXTS, PROVIDERS, STAGES, VOICE_MODES, Beat, Beats, Idea, LimitHit, QuickProject, Review, image_name,
                                  load_beats, load_quick, locked, require_beats, save_beats, save_quick)
 from vidflow.quick.preset import Preset, load_preset
 
@@ -208,6 +208,12 @@ def check_provider(name: str) -> str:
     return name
 
 
+def check_voice_mode(mode: str) -> str:
+    if mode not in VOICE_MODES:
+        raise VidflowError(f"Cách đọc giọng không hợp lệ: {mode!r} (chọn: {', '.join(VOICE_MODES)}).")
+    return mode
+
+
 @locked
 def record_limit(root: Path, provider: str, kind: str, reason: str = "") -> QuickProject:
     """Agent báo nguồn hết lượt / đòi trả phí. Job đang chạy sẽ kết thúc mã 3."""
@@ -285,9 +291,11 @@ def mark_redo(root: Path, ns: list[int], *, clip: bool = False) -> Beats:
 def update_settings(root: Path, *, image_model: str | None = None, video_model: str | None = None,
                     resolution: str | None = None, max_clips: int | None = None, allow_cont: bool | None = None,
                     channel_chars: list[str] | None = None, image_provider: str | None = None,
-                    video_provider: str | None = None) -> QuickProject:
-    """Cài đặt Flow + giới hạn clip + nối cảnh + nhân vật bộ kênh dùng trong video."""
+                    video_provider: str | None = None, voice_mode: str | None = None) -> QuickProject:
+    """Cài đặt Flow + giới hạn clip + nối cảnh + nhân vật bộ kênh + cách đọc giọng."""
     q = load_quick(root)
+    if voice_mode is not None:
+        q.voice_mode = check_voice_mode(voice_mode)
     if max_clips is not None:
         if max_clips < 0:
             raise VidflowError("max_clips phải ≥ 0.")
@@ -400,7 +408,7 @@ def status_summary(root: Path) -> dict:
         "ideas": len(q.ideas), "picked": q.picked, "picked_title": idea.title if idea else None,
         "beats": {
             "total": len(bl),
-            "voiced": voiced_count(root, bl),
+            "voiced": voiced_count(root, bl, q.voice_mode),
             "timed": beats.timed if beats else False,
             "prompted": sum(1 for b in bl if b.review and b.review.verdict in PASSING),
             "prompt_fail": sum(1 for b in bl if b.review and b.review.verdict == "fail"),
@@ -413,6 +421,7 @@ def status_summary(root: Path) -> dict:
         "errors": sum(1 for b in bl if b.error),
         "chars_missing": chars_missing,
         "allow_cont": q.allow_cont,
+        "voice_mode": q.voice_mode,
         "providers": {"image": q.flow.image_provider, "video": q.flow.video_provider},
         "limits": [x.model_dump() for x in q.limits],
         "clips": {"max": q.max_clips, "enabled": sum(1 for b in bl if b.clip.enabled),

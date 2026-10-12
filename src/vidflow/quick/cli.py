@@ -158,11 +158,15 @@ def pick(project: ProjectOpt, n: Annotated[int, typer.Argument(help="Số ý tư
 
 
 @_cmd(quick_app, "voice")
-def voice(project: ProjectOpt, config: ConfigOpt = None):
-    """TTS từng mốc (Gemini free tier), ghép audio/voice.wav, điền mốc thời gian."""
+def voice(project: ProjectOpt, config: ConfigOpt = None,
+          mode: Annotated[Optional[str], typer.Option("--mode", help="per_beat | chunk | full (mặc định theo cài đặt video)")] = None):
+    """TTS (Gemini free tier) theo cách đọc của video, ghép audio/voice.wav, điền mốc thời gian."""
     from vidflow.quick.voice import gemini_voice
 
-    secs = gemini_voice(project, load_config(config), on_progress=lambda d, t: typer.echo(f"  đọc {d}/{t}"))
+    mode = ops.check_voice_mode(mode or load_quick(project).voice_mode)
+    unit = "câu" if mode == "per_beat" else "đoạn"
+    secs = gemini_voice(project, load_config(config), mode=mode,
+                        on_progress=lambda d, t: typer.echo(f"  đọc {d}/{t} {unit}"))
     m, s = divmod(secs, 60)
     typer.echo(f"Đã ghép audio/voice.wav: {int(m)}:{s:05.2f}")
 
@@ -216,14 +220,15 @@ def settings(project: ProjectOpt,
              allow_cont: Annotated[Optional[bool], typer.Option("--allow-cont/--no-allow-cont")] = None,
              channel_char: Annotated[Optional[list[str]], typer.Option("--channel-char", help="Nhân vật bộ kênh dùng (lặp được)")] = None,
              image_provider: Annotated[Optional[str], typer.Option(help="Nguồn gen ảnh: flow | gemini | aistudio")] = None,
-             video_provider: Annotated[Optional[str], typer.Option(help="Nguồn gen clip: flow | gemini | aistudio")] = None):
-    """Cài đặt nguồn gen, model, giới hạn clip, nối cảnh, nhân vật bộ kênh."""
+             video_provider: Annotated[Optional[str], typer.Option(help="Nguồn gen clip: flow | gemini | aistudio")] = None,
+             voice_mode: Annotated[Optional[str], typer.Option(help="Cách đọc giọng: per_beat | chunk | full")] = None):
+    """Cài đặt nguồn gen, model, giới hạn clip, nối cảnh, nhân vật bộ kênh, cách đọc giọng."""
     q = ops.update_settings(project, image_model=image_model, video_model=video_model, resolution=resolution,
                             max_clips=max_clips, allow_cont=allow_cont, channel_chars=channel_char,
-                            image_provider=image_provider, video_provider=video_provider)
+                            image_provider=image_provider, video_provider=video_provider, voice_mode=voice_mode)
     typer.echo(f"Nguồn ảnh: {q.flow.image_provider} · nguồn clip: {q.flow.video_provider} · "
                f"ảnh: {q.flow.image_model} · clip: {q.flow.video_model or '(chưa chọn)'} {q.flow.resolution} · "
-               f"tối đa {q.max_clips} clip · nối cảnh: {'bật' if q.allow_cont else 'tắt'}")
+               f"tối đa {q.max_clips} clip · nối cảnh: {'bật' if q.allow_cont else 'tắt'} · đọc giọng: {q.voice_mode}")
 
 
 @_cmd(quick_app, "clip")

@@ -7,7 +7,7 @@ from vidflow.config import Config
 from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
 from vidflow.quick.model import Beat, Beats, create_quick, load_beats, save_beats
-from vidflow.quick.ops import status_summary
+from vidflow.quick.ops import status_summary, update_settings
 from vidflow.quick.preset import load_preset
 from vidflow.quick.voice import GAP_S, run_voice
 
@@ -59,12 +59,13 @@ def dur(t):
 def qroot(tmp_path):
     root = tmp_path / "v"
     create_quick(root, preset="doodle-giai-ma", title="T")
+    update_settings(root, voice_mode="per_beat")  # các test ở đây kiểm cách đọc từng câu
     save_beats(root, Beats(aspect="16:9", beats=[Beat(n=i + 1, text=t) for i, t in enumerate(TEXTS)]))
     return root
 
 
 def run(root, client):
-    return run_voice(root, Config(), client, preset=load_preset("doodle-giai-ma"), sleep=lambda s: None)
+    return run_voice(root, Config(), client, preset=load_preset("doodle-giai-ma"), sleep=lambda s: None, mode="per_beat")
 
 
 def test_voice_concat_and_timings(qroot):
