@@ -46,6 +46,14 @@ def test_login_page_restyled():
     assert not FORBIDDEN.search(page)
 
 
+def test_no_emoji_in_ui():
+    """Mọi file tĩnh (html/js/css, kể cả quick.js về sau) và trang đăng nhập: không emoji/dingbat, trừ dấu ✓."""
+    files = {p.name: p.read_text(encoding="utf-8") for p in STATIC.iterdir() if p.suffix in (".html", ".js", ".css")}
+    files["auth.LOGIN_HTML"] = auth.LOGIN_HTML
+    bad = {name: sorted({c for c in FORBIDDEN.findall(text) if c not in ALLOWED}) for name, text in files.items()}
+    assert {k: v for k, v in bad.items() if v} == {}
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="cần node để kiểm tra cú pháp JS")
 @pytest.mark.parametrize("js", sorted(p.name for p in STATIC.glob("*.js")))
 def test_js_syntax(js):
