@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -323,3 +324,44 @@ def test_garbage_voice_wav_is_vidflow_error(qroot, img):
     (qroot / "audio" / "voice.wav").write_bytes(b"not a wav at all")
     with pytest.raises(VidflowError, match="voice.wav hỏng"):
         rq.build_render_props(qroot)
+
+
+def test_zero_length_clip_uses_image(qroot, img):
+    with_images(qroot, img)
+    with_clip(qroot, img, 1)
+    plan = rq.build_render_props(qroot, probe=lambda _: 0.0)
+    assert plan.props["beats"][0]["kind"] == "image"
+    assert any("Mốc 1" in w and "dùng ảnh" in w for w in plan.warnings)
+
+
+def test_copy_fallback_does_not_write_through_existing_link(qroot, img, tmp_path, monkeypatch):
+    with_images(qroot, img, ns=(1,))
+    other = tmp_path / "other.png"
+    other.write_bytes(b"ORIGINAL")
+    dest = qroot / "tmp" / "render" / "public" / "images" / "001_00-00.png"
+    # rmtree "không làm gì" để mô phỏng link cũ còn sót ở đích
+    monkeypatch.setattr(rq.shutil, "rmtree", lambda p, **kw: None)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    os.link(other, dest)
+
+    def no_link(src, dst):
+        raise OSError(18, "Cross-device link")
+
+    monkeypatch.setattr(rq.os, "link", no_link)
+    rq.write_render_props(qroot)
+    assert other.read_bytes() == b"ORIGINAL"
+    assert dest.read_bytes() == (qroot / "images" / "001_00-00.png").read_bytes()
+
+
+def test_public_dir_removal_failure_is_error(qroot, img, monkeypatch):
+    with_images(qroot, img, ns=(1,))
+    (qroot / "tmp" / "render" / "public").mkdir(parents=True)
+
+    def fail(p, **kw):
+        if kw.get("ignore_errors"):
+            return None
+        raise PermissionError(13, "denied")
+
+    monkeypatch.setattr(rq.shutil, "rmtree", fail)
+    with pytest.raises(VidflowError):
+        rq.write_render_props(qroot)

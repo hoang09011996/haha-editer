@@ -136,6 +136,8 @@ def build_render_props(root: Path, opts: RenderOptions | None = None, *,
         if clip is not None:
             try:
                 clip_len = round(probe(clip), 3)
+                if clip_len <= 0:
+                    raise VidflowError(f"thời lượng {clip_len:g}s")
             except VidflowError as e:
                 warnings.append(f"Mốc {b.n}: không đọc được clip ({e}) — dùng ảnh.")
                 clip = None
@@ -193,7 +195,11 @@ def stage_public(root: Path, assets: dict[str, Path]) -> Path:
     (Remotion copy cả public dir vào bundle mỗi lần render — trỏ thẳng vào project sẽ copy cả out/.)
     Dùng hard link (khác ổ đĩa → copy), KHÔNG symlink: server của Remotion trả 404 cho symlink."""
     public = Path(root) / PUBLIC_DIR
-    shutil.rmtree(public, ignore_errors=True)  # chỉ xóa link/bản sao, không đụng file thật
+    if public.exists():
+        try:
+            shutil.rmtree(public)  # chỉ xóa link/bản sao, không đụng file thật
+        except OSError as e:
+            raise VidflowError(f"Không xóa được thư mục tạm {public}: {e}") from e
     public.mkdir(parents=True, exist_ok=True)
     for rel, src in assets.items():
         dest = public / rel
@@ -202,6 +208,7 @@ def stage_public(root: Path, assets: dict[str, Path]) -> Path:
         try:
             os.link(src, dest)
         except OSError:
+            dest.unlink(missing_ok=True)  # đích cũ có thể là hard link tới file khác — không ghi xuyên qua
             shutil.copy2(src, dest)
     return public
 
