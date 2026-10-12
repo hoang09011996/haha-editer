@@ -280,10 +280,12 @@ function qQuotaBanner() {
 }
 function qBoard() {
   const d = Q.data, job = d.job;
-  const center = h("section", { class: "content" }, qBoardHead(), qQuotaBanner(), qNext(),
-    d.beats.length ? qFilters() : null, d.beats.length ? qScenes() : h("p", { class: "hint" }, "Chưa có mốc — làm theo thẻ Bước tiếp theo ở trên."),
+  // Log việc nền đặt ngay dưới đầu trang (trước danh sách mốc dài) để thấy ngay khi bấm chạy
+  const center = h("section", { class: "content" }, qBoardHead(), qQuotaBanner(),
     job ? h("details", { class: "joblog", open: job.state !== "done" }, h("summary", {}, `${job.label} · ${QJOB[job.state] || job.state}`),
-      h("pre", { class: "log", id: "log" }, job.log || "(đang chạy…)")) : null);
+      h("pre", { class: "log", id: "log" }, job.log || "(đang chạy…)")) : null,
+    qNext(), d.beats.length ? qFilters() : null,
+    d.beats.length ? qScenes() : h("p", { class: "hint" }, "Chưa có mốc — làm theo thẻ Bước tiếp theo ở trên."));
   return [center, qPanel()];
 }
 
