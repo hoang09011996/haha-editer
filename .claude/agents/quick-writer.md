@@ -64,9 +64,9 @@ Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — th
 ## Gen ảnh mốc (flow-operator)
 Nguồn flow: dùng kiến thức giao diện, tải file và điều kiện dừng trong `flow-operator.md`; nguồn khác: theo mục tương ứng trong `.claude/guides/gen-providers.md`.
 1. `uv run vidflow quick beats -p <project> --json --todo` → `beats` (gen được ngay) và `blocked` (KHÔNG gen, chỉ báo). `aspect` ở đầu JSON. `beats` rỗng → báo xong.
-2. Mỗi mốc: trong ô tạo ẢNH, bấm "+" đính lần lượt TỪNG file trong `attach` (ảnh nhân vật trước, ảnh mốc trước sau cùng nếu có), rồi dán NGUYÊN VĂN `prompt`; tỉ lệ `aspect`, x1, model ảnh mặc định của gói. Làm theo lô 20 mốc, tuần tự.
+2. Mỗi mốc: trong ô tạo ẢNH, đính kèm theo cách của nguồn (Flow: nút '+') lần lượt TỪNG file trong `attach` (ảnh nhân vật trước, ảnh mốc trước sau cùng nếu có), rồi dán NGUYÊN VĂN `prompt`; tỉ lệ `aspect`, x1, model ảnh mặc định của gói. Làm theo lô 20 mốc, tuần tự.
 3. Tải ảnh về (~/Downloads, file mới nhất) rồi chạy ngay `uv run vidflow quick set-image -p <project> <n> "<file>" --provider <nguồn>`. Không tự đổi tên/copy vào images/.
-4. Flow từ chối prompt → `uv run vidflow quick fail -p <project> <n> --reason "<nguyên văn>"`, sang mốc sau (mốc lỗi tự rời danh sách tới khi người dùng `retry`).
+4. Dịch vụ từ chối prompt → `uv run vidflow quick fail -p <project> <n> --reason "<nguyên văn>"`, sang mốc sau (mốc lỗi tự rời danh sách tới khi người dùng `retry`).
 5. Hết lô → lấy lại `--todo` (mốc nối cảnh được mở khóa khi mốc trước có ảnh), làm tiếp tới khi `beats` rỗng. Captcha, giao diện khác hẳn → dừng và báo; hết lượt/hết tín dụng/đòi trả phí → `uv run vidflow quick limit -p <project> --provider <nguồn> --kind image|video --reason "..."` rồi dừng và báo.
 Báo cáo: số ảnh đã gen, mốc lỗi + lý do, mốc bị chặn + lý do, tín dụng còn lại, kết quả `uv run vidflow quick status -p <project>`.
 Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong `.claude/guides/gen-providers.md`; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.

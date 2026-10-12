@@ -24,6 +24,7 @@ Trang: https://gemini.google.com (tài khoản gói Google AI của người dù
 
 ## aistudio
 Trang: https://aistudio.google.com (đăng nhập bằng tài khoản Google của người dùng, chỉ dùng giao diện web).
+- BẮT BUỘC trước khi gen bất cứ thứ gì: kiểm tra trên giao diện AI Studio API key / dự án Cloud đang được chọn có gắn thanh toán (billing) không, và mọi chỉ báo giá hoặc "paid tier". Chỉ tiếp tục khi giao diện cho thấy RÕ là dùng miễn phí (free tier / không gắn billing). Có gắn billing hoặc không xác minh được là miễn phí → chạy `uv run vidflow quick limit -p <project> --provider aistudio --kind image|video --reason "không xác minh được miễn phí"` rồi DỪNG. Không tự đổi dự án hay API key.
 - Chọn model tạo ảnh (Nano Banana / Gemini image) hoặc model video (Veo) trong danh sách model của giao diện; đặt tỉ lệ khung hình trong phần cài đặt chạy nếu có.
 - Đính ảnh tham chiếu (`attach` / `image`) bằng nút thêm tệp của ô prompt; dán prompt nguyên văn; chạy (Run).
 - Tải ảnh/video bằng nút tải xuống của kết quả.
