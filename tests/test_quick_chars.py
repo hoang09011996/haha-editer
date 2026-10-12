@@ -32,7 +32,6 @@ def test_lookup_merges_channel_and_video(qroot):
     assert known["FARMER"].image is None
 
 
-@pytest.mark.skip(reason="Task 6")
 def test_channel_chars_filter(qroot):
     ops.update_settings(qroot, channel_chars=[])
     assert "MODERNYOU" not in chars.lookup(qroot)

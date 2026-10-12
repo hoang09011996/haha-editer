@@ -10,7 +10,7 @@ import typer
 
 from vidflow.config import load_config
 from vidflow.errors import VidflowError
-from vidflow.quick import chars, jobs, ops
+from vidflow.quick import chars, clips, jobs, ops
 from vidflow.quick.model import create_quick, load_quick, require_beats
 from vidflow.quick.preset import import_preset, list_presets, load_preset
 
@@ -141,8 +141,17 @@ def status(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")
 
 @_cmd(quick_app, "beats")
 def beats(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")] = False,
-          todo: Annotated[bool, typer.Option("--todo", help="Chỉ mốc cần gen ảnh")] = False):
+          todo: Annotated[bool, typer.Option("--todo", help="Chỉ mốc cần gen ảnh")] = False,
+          todo_clips: Annotated[bool, typer.Option("--todo-clips", help="Chỉ clip cần gen")] = False):
     """Liệt kê mốc (agent dùng --json)."""
+    if todo_clips:
+        data = clips.clip_todo(project)
+        if json_out:
+            typer.echo(json.dumps(data, ensure_ascii=False, indent=1))
+        else:
+            for c in data["clips"]:
+                typer.echo(f"{c['n']:03d} {c['duration']:.1f}s {c['prompt'][:60]}")
+        return
     data = ops.list_beats(project, todo=todo)
     if json_out:
         typer.echo(json.dumps(data, ensure_ascii=False, indent=1))
@@ -153,6 +162,46 @@ def beats(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")]
         typer.echo(f"{b['n']:03d} [{t}] {b['status']:<7} {v:<5} {b['text'][:60]}")
     for x in data.get("blocked", []):
         typer.echo(f"{x['n']:03d} BỊ CHẶN: {x['reason']}")
+
+
+@_cmd(quick_app, "settings")
+def settings(project: ProjectOpt,
+             image_model: Annotated[Optional[str], typer.Option(help="Model ảnh Flow")] = None,
+             video_model: Annotated[Optional[str], typer.Option(help="Model clip Flow, ví dụ \"Veo 3.1 Lite\"")] = None,
+             resolution: Annotated[Optional[str], typer.Option(help="720p | 1080p")] = None,
+             max_clips: Annotated[Optional[int], typer.Option(help="Số clip tối đa (0 = chỉ ảnh)")] = None,
+             allow_cont: Annotated[Optional[bool], typer.Option("--allow-cont/--no-allow-cont")] = None,
+             channel_char: Annotated[Optional[list[str]], typer.Option("--channel-char", help="Nhân vật bộ kênh dùng (lặp được)")] = None):
+    """Cài đặt Flow, giới hạn clip, nối cảnh, nhân vật bộ kênh."""
+    q = ops.update_settings(project, image_model=image_model, video_model=video_model, resolution=resolution,
+                            max_clips=max_clips, allow_cont=allow_cont, channel_chars=channel_char)
+    typer.echo(f"Ảnh: {q.flow.image_model} · clip: {q.flow.video_model or '(chưa chọn)'} {q.flow.resolution} · "
+               f"tối đa {q.max_clips} clip · nối cảnh: {'bật' if q.allow_cont else 'tắt'}")
+
+
+@_cmd(quick_app, "clip")
+def clip_toggle(project: ProjectOpt, action: Annotated[str, typer.Argument(help="on | off")],
+                n: Annotated[list[int], typer.Argument(help="Các mốc")]):
+    """Bật/tắt clip động cho mốc."""
+    if action not in ("on", "off"):
+        raise VidflowError("Dùng `clip on <n...>` hoặc `clip off <n...>`.")
+    clips.set_clip_enabled(project, n, action == "on")
+    typer.echo(f"Clip {action}: {', '.join(map(str, n))}")
+
+
+@_cmd(quick_app, "set-clip-prompts")
+def set_clip_prompts(project: ProjectOpt, json_file: JsonFile):
+    """Ghi prompt clip [{n, prompt, verdict, score, issues}] và bật clip các mốc đó."""
+    items = _read_json(json_file)
+    clips.set_clip_prompts(project, items)
+    typer.echo(f"Đã ghi {len(items)} prompt clip")
+
+
+@_cmd(quick_app, "set-clip")
+def set_clip(project: ProjectOpt, n: Annotated[int, typer.Argument()], file: Annotated[Path, typer.Argument()]):
+    """Nhập clip đã gen → clips/NNN_MM-SS.<ext>."""
+    b = clips.set_clip(project, n, file)
+    typer.echo(f"Mốc {n} → {b.clip.file}")
 
 
 @_cmd(quick_app, "build")

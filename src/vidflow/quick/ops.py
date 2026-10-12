@@ -226,6 +226,39 @@ def mark_redo(root: Path, ns: list[int], *, clip: bool = False) -> Beats:
     return beats
 
 
+def update_settings(root: Path, *, image_model: str | None = None, video_model: str | None = None,
+                    resolution: str | None = None, max_clips: int | None = None, allow_cont: bool | None = None,
+                    channel_chars: list[str] | None = None) -> QuickProject:
+    """Cài đặt Flow + giới hạn clip + nối cảnh + nhân vật bộ kênh dùng trong video."""
+    q = load_quick(root)
+    if max_clips is not None:
+        if max_clips < 0:
+            raise VidflowError("max_clips phải ≥ 0.")
+        beats = load_beats(root)
+        on = sum(1 for b in beats.beats if b.clip.enabled) if beats else 0
+        if max_clips < on:
+            raise VidflowError(f"Đang bật {on} clip — tắt bớt trước khi giảm tối đa xuống {max_clips}.")
+        q.max_clips = max_clips
+    if resolution is not None:
+        if resolution not in ("720p", "1080p"):
+            raise VidflowError("Độ phân giải chỉ 720p hoặc 1080p.")
+        q.flow.resolution = resolution
+    if video_model is not None:
+        q.flow.video_model = video_model.strip()
+    if image_model is not None:
+        q.flow.image_model = image_model.strip()
+    if allow_cont is not None:
+        q.allow_cont = allow_cont
+    if channel_chars is not None:
+        have = {c.id for c in load_preset(q.preset).characters}
+        unknown = [c for c in channel_chars if c not in have]
+        if unknown:
+            raise VidflowError(f"Bộ kênh không có: {', '.join('@' + u for u in unknown)}")
+        q.channel_chars = list(channel_chars)
+    save_quick(root, q)
+    return q
+
+
 def beat_file(beat: Beat) -> str | None:
     return None if beat.start is None else f"images/{image_name(beat.n, beat.start)}.jpg"
 

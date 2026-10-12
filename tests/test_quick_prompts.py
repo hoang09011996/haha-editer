@@ -23,7 +23,6 @@ def test_set_prompts_batch_is_atomic(qroot, P):
     assert load_beats(qroot).beats[0].prompt == ""
 
 
-@pytest.mark.skip(reason="Task 6")
 def test_cont_rules(qroot, P):
     ops.set_prompts(qroot, [{"n": 2, "prompt": P("x"), "verdict": "pass", "score": 8, "cont": True}])
     assert load_beats(qroot).beats[1].cont is True
