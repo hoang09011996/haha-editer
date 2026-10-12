@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import re
 import shutil
+import wave
+from array import array
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -16,7 +18,7 @@ from vidflow.errors import VidflowError
 from vidflow.quick import chars, clips, ops
 from vidflow.quick.chars import CharRef, char_rows, lookup
 from vidflow.quick.jobs import review_cmd
-from vidflow.quick.model import CHAR_ID, create_quick, is_quick, load_beats, load_quick, require_beats
+from vidflow.quick.model import CHAR_ID, IMAGE_EXTS, create_quick, is_quick, load_beats, load_quick, require_beats
 from vidflow.quick.preset import ID_RE, channel_refs_dir, list_presets, load_preset
 from vidflow.ui.jobs import JobRunner, ReviewRunner
 from vidflow.ui.quick_jobs import check_quick_job
@@ -24,6 +26,36 @@ from vidflow.ui.quick_jobs import check_quick_job
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 CHAR_RE = re.compile(CHAR_ID)
 SHEET_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,23}\.(png|jpg|webp)$")
+MAX_UPLOAD = 15 * 1024 * 1024
+
+
+def sniff_image(data: bytes) -> str | None:
+    """Đuôi theo nội dung thật (không tin tên file): .png / .jpg / .webp; None nếu không phải ảnh."""
+    if data.startswith(b"\x89PNG"):
+        return ".png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def waveform(path: Path, bins: int) -> tuple[list[float], float]:
+    """Đỉnh biên độ (0–1) của WAV 16-bit chia thành tối đa `bins` đoạn, và độ dài (giây)."""
+    with wave.open(str(path), "rb") as w:
+        if w.getsampwidth() != 2:
+            raise VidflowError(f"{path}: cần WAV 16-bit")
+        frames, rate = w.getnframes(), w.getframerate()
+        per = max(1, -(-frames // bins))
+        peaks: list[float] = []
+        while True:
+            data = w.readframes(per)
+            if not data:
+                break
+            a = array("h")
+            a.frombytes(data[: len(data) // 2 * 2])
+            peaks.append(round(max(max(a), -min(a)) / 32768, 3) if len(a) else 0.0)
+    return peaks, round(frames / rate, 3)
 
 
 def media_url(root: Path, name: str, rel: str | None) -> str | None:
@@ -391,5 +423,37 @@ def quick_router(projects_root: Path, runner: JobRunner, reviews: ReviewRunner) 
             raise HTTPException(502, "Kiểm duyệt không ghi kết quả — thử lại.")
         lines = [ln for ln in out.splitlines() if ln.strip()]
         return {"n": req.n, "clip": req.clip, "review": rv.model_dump(), "summary": lines[-1] if lines else ""}
+
+
+    @router.post("/api/quick/{name}/chars/{char_id}/image")
+    def upload_char_image(name: str, char_id: str, file: UploadFile = File(...)):
+        root = qroot(name)
+        known = _do(lookup, root)
+        if not CHAR_RE.match(char_id) or char_id not in known:
+            raise HTTPException(404, f"Không có nhân vật @{char_id}")
+        if not IMAGE_EXTS.get(Path(file.filename or "").suffix.lower()):
+            raise HTTPException(422, "Chỉ nhận ảnh png, jpg hoặc webp.")
+        data = file.file.read(MAX_UPLOAD + 1)
+        if len(data) > MAX_UPLOAD:
+            raise HTTPException(413, f"Ảnh quá {MAX_UPLOAD // (1024 * 1024)} MB.")
+        ext = sniff_image(data)
+        if ext is None:
+            raise HTTPException(422, "File không phải ảnh png/jpg/webp.")
+        tmp = root / "tmp" / f"upload-{char_id}{ext}"
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(data)
+        try:
+            _do(chars.set_char_image, root, char_id, tmp, channel=known[char_id].scope == "channel")
+        finally:
+            tmp.unlink(missing_ok=True)
+        return {"image_url": char_url(name, load_quick(root).preset, lookup(root).get(char_id))}
+
+    @router.get("/api/quick/{name}/waveform")
+    def waveform_ep(name: str, bins: int = Query(300, ge=20, le=2000)):
+        voice = qroot(name) / ops.VOICE_FILE
+        if not voice.is_file():
+            return {"peaks": [], "duration": 0}
+        peaks, duration = _do(waveform, voice, bins)
+        return {"peaks": peaks, "duration": duration}
 
     return router

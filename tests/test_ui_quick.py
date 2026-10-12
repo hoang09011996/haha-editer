@@ -1,6 +1,8 @@
 """API quy trình nhanh trên UI (spec 2026-10-12, Giai đoạn 3)."""
 import sys
 import time
+import wave
+from array import array
 from types import SimpleNamespace
 
 import pytest
@@ -491,3 +493,57 @@ def test_review_runner_timeout_kills_grandchild(tmp_path):
         time.sleep(0.1)
     else:
         raise AssertionError("tiến trình cháu vẫn sống sau khi quá giờ")
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+
+def test_upload_char_image_video_and_channel(env):
+    chars.set_chars(env.root, [FARMER])
+    r = env.c.post("/api/quick/vid/chars/FARMER/image", files={"file": ("farmer.PNG", PNG, "image/png")})
+    assert r.status_code == 200, r.text
+    assert (env.root / "refs" / "FARMER.png").read_bytes() == PNG
+    url = r.json()["image_url"]
+    assert url.startswith("/media/vid/refs/FARMER.png?v=")
+    assert env.c.get(url.split("?")[0]).status_code == 200
+    r = env.c.post("/api/quick/vid/chars/MODERNYOU/image",
+                   files={"file": ("m.jpg", b"\xff\xd8\xff\xe0" + b"0" * 20, "image/jpeg")})
+    assert r.status_code == 200, r.text
+    assert (env.presets / "refs" / "doodle-giai-ma" / "MODERNYOU.jpg").is_file()
+    assert r.json()["image_url"].startswith("/media/_presets/doodle-giai-ma/MODERNYOU.jpg?v=")
+    assert env.c.get("/media/_presets/doodle-giai-ma/MODERNYOU.jpg").status_code == 200
+    assert list((env.root / "tmp").iterdir()) == []
+
+
+def test_upload_validation(env, monkeypatch):
+    import vidflow.ui.quick_api as qa
+
+    chars.set_chars(env.root, [FARMER])
+
+    def up(cid, fname, data):
+        return env.c.post(f"/api/quick/vid/chars/{cid}/image", files={"file": (fname, data, "application/octet-stream")})
+
+    assert up("FARMER", "f.gif", PNG).status_code == 422
+    r = up("FARMER", "f.png", b"<script>alert(1)</script>")
+    assert r.status_code == 422 and "không phải ảnh" in r.json()["detail"]
+    assert up("GHOST", "f.png", PNG).status_code == 404
+    assert up("bad-id", "f.png", PNG).status_code == 404
+    monkeypatch.setattr(qa, "MAX_UPLOAD", 10)
+    assert up("FARMER", "f.png", PNG).status_code == 413
+    assert not any((env.root / "refs").iterdir())
+    assert list((env.root / "tmp").iterdir()) == []
+
+
+def test_waveform(env):
+    assert env.c.get("/api/quick/vid/waveform").json() == {"peaks": [], "duration": 0}
+    a = array("h", [0] * 24000 + [16384] * 24000)
+    with wave.open(str(env.root / "audio" / "voice.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(a.tobytes())
+    r = env.c.get("/api/quick/vid/waveform?bins=100").json()
+    assert r["duration"] == 2.0 and len(r["peaks"]) == 100
+    assert r["peaks"][0] == 0.0 and r["peaks"][-1] == 0.5
+    assert env.c.get("/api/quick/vid/waveform?bins=5").status_code == 422
+    assert env.c.get("/api/quick/vid").json()["voice_url"].startswith("/media/vid/audio/voice.wav?v=")

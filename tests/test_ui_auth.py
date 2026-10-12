@@ -62,3 +62,19 @@ def test_logout(client):
 def test_forged_cookie_rejected(client):
     client.cookies.set("vf_session", "gia-mao")
     assert client.get("/api/projects").status_code == 401
+
+
+QUICK_ROUTES = [
+    ("get", "/api/quick"), ("get", "/api/presets"), ("get", "/api/quick/vid"), ("post", "/api/quick"),
+    ("post", "/api/quick/vid/settings"), ("post", "/api/quick/vid/pick"), ("post", "/api/quick/vid/redo"),
+    ("post", "/api/quick/vid/retry"), ("post", "/api/quick/vid/clip"), ("post", "/api/quick/vid/prompt"),
+    ("post", "/api/quick/vid/review"), ("post", "/api/quick/vid/override"),
+    ("post", "/api/quick/vid/chars/FARMER/image"), ("post", "/api/quick/vid/chars/FARMER/promote"),
+    ("post", "/api/quick/vid/jobs"), ("post", "/api/quick/vid/jobs/stop"), ("get", "/api/quick/vid/waveform"),
+    ("get", "/media/vid/images/001_00-00.jpg"), ("get", "/media/_presets/doodle-giai-ma/MODERNYOU.png"),
+]
+
+
+@pytest.mark.parametrize("method,path", QUICK_ROUTES)
+def test_quick_routes_require_login(client, method, path):
+    assert getattr(client, method)(path).status_code == 401
