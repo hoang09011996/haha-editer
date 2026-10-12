@@ -65,17 +65,25 @@ Q.open = async function (name) {
   Q.render();
   qAutoRefresh();
 };
+// đang chọn/gõ trong ô của thanh đầu hoặc khung phải (ô "Nguồn", cài đặt...) → không vẽ lại kẻo mất lựa chọn dở
+function qFormFocus() {
+  const ae = document.activeElement;
+  return !!ae && /^(SELECT|INPUT|TEXTAREA)$/.test(ae.tagName) && !!ae.closest("#main .qhead, #main .panel");
+}
 function qAutoRefresh() {
   clearInterval(Q.timer);
   Q.timer = setInterval(async () => {
-    if (S.kind !== "quick" || S.name !== Q.name || !(Q.data?.job && Q.data.job.state === "running")) { clearInterval(Q.timer); return; }
+    const running = Q.data?.job && Q.data.job.state === "running";
+    if (S.kind !== "quick" || S.name !== Q.name || (!running && !Q.stale)) { clearInterval(Q.timer); return; }
     if (Q.screen === "preview") return; // không làm gián đoạn trình phát
-    try { await qReload(); } catch { return; }
+    if (running) { try { await qReload(); } catch { return; } }
+    if (qFormFocus()) { Q.stale = true; return; } // dữ liệu đã tải lặng lẽ; vẽ ở lượt sau khi rời ô
     Q.render({ keepPanel: true });
   }, 5000);
 }
 Q.render = function (opts = {}) {
   const d = Q.data; if (!d || !qActive()) return; // không vẽ đè khi đang mở video chi tiết / trang chủ
+  Q.stale = false;
   document.getElementById("savebar").hidden = true; document.body.classList.remove("has-savebar");
   const main = document.getElementById("main");
   const oldPanel = opts.keepPanel ? main.querySelector(".panel") : null;
@@ -157,6 +165,8 @@ async function qRetryErrors() {
     toast(`Đã đưa ${img.count + clip.count} mốc lỗi về hàng chờ`);
     await qReload();
     if (qActive(name)) await qJob(kind, { confirmed: true });
+    // một hàng chạy duy nhất: không nối job clip sau job ảnh được — nhắc người dùng tự bấm
+    if (kind === "flow" && clip.count && qActive(name)) toast("Đã đưa lại clip lỗi vào hàng chờ — bấm Gen clip sau khi gen ảnh xong.");
   } catch (e) { qSay(name, e.message, true); }
 }
 async function qPick(n) {
