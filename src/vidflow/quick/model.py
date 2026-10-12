@@ -17,6 +17,8 @@ SUBDIRS = ("images", "clips", "refs", "out", "audio", "audio/beats", "logs", "tm
 IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png", ".webp": ".webp"}
 VIDEO_EXTS = {".mp4": ".mp4", ".mov": ".mov", ".webm": ".webm"}
 CHAR_ID = r"^[A-Z][A-Z0-9_]{1,23}$"
+PROVIDERS = ("flow", "gemini", "aistudio")
+Provider = Literal["flow", "gemini", "aistudio"]
 Stage = Literal["new", "ideas", "picked", "script", "voiced", "prompted", "imaged", "built"]
 STAGES: tuple[str, ...] = Stage.__args__
 
@@ -39,6 +41,16 @@ class FlowSettings(BaseModel):
     image_model: str = "Nano Banana 2"
     video_model: str = ""  # bắt buộc chọn trước khi gen clip
     resolution: Literal["720p", "1080p"] = "720p"
+    image_provider: Provider = "flow"  # nguồn gen ảnh + character sheet
+    video_provider: Provider = "flow"  # nguồn gen clip
+
+
+class LimitHit(BaseModel):
+    """Một lần nguồn gen báo hết lượt (hoặc đòi trả phí) — agent ghi qua `quick limit`."""
+    provider: Provider
+    kind: Literal["image", "video"]
+    reason: str = ""
+    at: str  # ISO 8601, giờ máy
 
 
 class QuickProject(BaseModel):
@@ -52,6 +64,7 @@ class QuickProject(BaseModel):
     flow: FlowSettings = Field(default_factory=FlowSettings)
     max_clips: int = Field(default=12, ge=0)
     allow_cont: bool = True
+    limits: list[LimitHit] = []
 
     def picked_idea(self) -> Idea | None:
         if self.picked and 1 <= self.picked <= len(self.ideas):
@@ -72,6 +85,7 @@ class Clip(BaseModel):
     file: str | None = None  # clips/NNN_MM-SS.mp4
     status: Literal["pending", "ok", "redo", "error"] = "pending"
     error: str = ""
+    provider: str = ""  # nguồn đã gen clip
 
 
 class Beat(BaseModel):
@@ -87,6 +101,7 @@ class Beat(BaseModel):
     cont: bool = False    # nối cảnh: đính ảnh mốc liền trước khi gen
     clip: Clip = Field(default_factory=Clip)
     error: str = ""       # lý do Flow từ chối ảnh gần nhất (rỗng = không lỗi)
+    provider: str = ""  # nguồn đã gen ảnh
 
 
 class Beats(BaseModel):

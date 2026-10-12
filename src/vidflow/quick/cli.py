@@ -19,6 +19,7 @@ preset_app = typer.Typer(no_args_is_help=True, help="Bộ kênh (brief + câu ne
 
 ProjectOpt = Annotated[Path, typer.Option("--project", "-p", help="Thư mục project nhanh")]
 ClipOpt = Annotated[bool, typer.Option("--clip", help="Áp dụng cho prompt/clip động thay vì ảnh")]
+ProviderOpt = Annotated[Optional[str], typer.Option("--provider", help="Nguồn gen: flow | gemini | aistudio")]
 ConfigOpt = Annotated[Optional[Path], typer.Option("--config", help="Đường dẫn vidflow.toml")]
 JsonFile = Annotated[Path, typer.Option("--json", help="File JSON đầu vào")]
 PrintOpt = Annotated[bool, typer.Option("--print", help="Chỉ in lệnh giao cho Claude, không chạy")]
@@ -202,11 +203,15 @@ def settings(project: ProjectOpt,
              resolution: Annotated[Optional[str], typer.Option(help="720p | 1080p")] = None,
              max_clips: Annotated[Optional[int], typer.Option(help="Số clip tối đa (0 = chỉ ảnh)")] = None,
              allow_cont: Annotated[Optional[bool], typer.Option("--allow-cont/--no-allow-cont")] = None,
-             channel_char: Annotated[Optional[list[str]], typer.Option("--channel-char", help="Nhân vật bộ kênh dùng (lặp được)")] = None):
-    """Cài đặt Flow, giới hạn clip, nối cảnh, nhân vật bộ kênh."""
+             channel_char: Annotated[Optional[list[str]], typer.Option("--channel-char", help="Nhân vật bộ kênh dùng (lặp được)")] = None,
+             image_provider: Annotated[Optional[str], typer.Option(help="Nguồn gen ảnh: flow | gemini | aistudio")] = None,
+             video_provider: Annotated[Optional[str], typer.Option(help="Nguồn gen clip: flow | gemini | aistudio")] = None):
+    """Cài đặt nguồn gen, model, giới hạn clip, nối cảnh, nhân vật bộ kênh."""
     q = ops.update_settings(project, image_model=image_model, video_model=video_model, resolution=resolution,
-                            max_clips=max_clips, allow_cont=allow_cont, channel_chars=channel_char)
-    typer.echo(f"Ảnh: {q.flow.image_model} · clip: {q.flow.video_model or '(chưa chọn)'} {q.flow.resolution} · "
+                            max_clips=max_clips, allow_cont=allow_cont, channel_chars=channel_char,
+                            image_provider=image_provider, video_provider=video_provider)
+    typer.echo(f"Nguồn ảnh: {q.flow.image_provider} · nguồn clip: {q.flow.video_provider} · "
+               f"ảnh: {q.flow.image_model} · clip: {q.flow.video_model or '(chưa chọn)'} {q.flow.resolution} · "
                f"tối đa {q.max_clips} clip · nối cảnh: {'bật' if q.allow_cont else 'tắt'}")
 
 
@@ -229,9 +234,10 @@ def set_clip_prompts(project: ProjectOpt, json_file: JsonFile):
 
 
 @_cmd(quick_app, "set-clip")
-def set_clip(project: ProjectOpt, n: Annotated[int, typer.Argument()], file: Annotated[Path, typer.Argument()]):
+def set_clip(project: ProjectOpt, n: Annotated[int, typer.Argument()], file: Annotated[Path, typer.Argument()],
+             provider: ProviderOpt = None):
     """Nhập clip đã gen → clips/NNN_MM-SS.<ext>."""
-    b = clips.set_clip(project, n, file)
+    b = clips.set_clip(project, n, file, provider=provider or "")
     typer.echo(f"Mốc {n} → {b.clip.file}")
 
 
@@ -377,6 +383,16 @@ def fail_cmd(project: ProjectOpt, n: Annotated[int, typer.Argument()],
     typer.echo(f"Mốc {n}: ghi lỗi {'clip' if clip else 'ảnh'}")
 
 
+@_cmd(quick_app, "limit")
+def limit(project: ProjectOpt,
+          provider: Annotated[str, typer.Option(help="flow | gemini | aistudio")],
+          kind: Annotated[str, typer.Option(help="image | video")],
+          reason: Annotated[str, typer.Option(help="Nguyên văn thông báo của dịch vụ")] = ""):
+    """Agent báo nguồn gen hết lượt / đòi trả phí (job sẽ dừng, mã 3)."""
+    ops.record_limit(project, provider, kind, reason)
+    typer.echo(f"Đã ghi: hết lượt {'ảnh' if kind == 'image' else 'clip'} ở {provider}")
+
+
 @_cmd(quick_app, "retry")
 def retry(project: ProjectOpt, n: Annotated[Optional[list[int]], typer.Argument(help="Mốc (trống = mọi mốc lỗi)")] = None,
           clip: ClipOpt = False):
@@ -386,9 +402,10 @@ def retry(project: ProjectOpt, n: Annotated[Optional[list[int]], typer.Argument(
 
 
 @_cmd(quick_app, "set-image")
-def set_image(project: ProjectOpt, n: Annotated[int, typer.Argument()], file: Annotated[Path, typer.Argument()]):
+def set_image(project: ProjectOpt, n: Annotated[int, typer.Argument()], file: Annotated[Path, typer.Argument()],
+              provider: ProviderOpt = None):
     """Gắn ảnh cho mốc → images/NNN_MM-SS.<ext>."""
-    b = ops.set_image(project, n, file)
+    b = ops.set_image(project, n, file, provider=provider or "")
     typer.echo(f"Mốc {n} → {b.image}")
 
 

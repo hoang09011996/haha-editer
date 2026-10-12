@@ -7,7 +7,7 @@ from pathlib import Path
 from vidflow.errors import VidflowError
 from vidflow.quick.chars import check_known, lookup, parse_refs
 from vidflow.quick.model import VIDEO_EXTS, Beat, Beats, Review, image_name, load_quick, require_beats, save_beats
-from vidflow.quick.ops import PASSING
+from vidflow.quick.ops import PASSING, check_provider
 
 
 def _enabled(beats: Beats) -> int:
@@ -59,8 +59,10 @@ def set_clip_prompts(root: Path, items: list[dict]) -> Beats:
     return beats
 
 
-def set_clip(root: Path, n: int, src: Path) -> Beat:
+def set_clip(root: Path, n: int, src: Path, *, provider: str = "") -> Beat:
     """Nhập clip đã gen → clips/NNN_MM-SS.<ext>."""
+    if provider:
+        check_provider(provider)
     root, src = Path(root), Path(src)
     if not src.is_file():
         raise VidflowError(f"Không thấy file clip {src}")
@@ -80,7 +82,7 @@ def set_clip(root: Path, n: int, src: Path) -> Beat:
         shutil.copyfile(src, dest)
     if b.clip.file and b.clip.file != rel:
         (root / b.clip.file).unlink(missing_ok=True)
-    b.clip.file, b.clip.status, b.clip.error = rel, "ok", ""
+    b.clip.file, b.clip.status, b.clip.error, b.clip.provider = rel, "ok", "", provider
     save_beats(root, beats)
     return b
 

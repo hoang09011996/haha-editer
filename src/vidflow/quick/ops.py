@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
 from vidflow.quick.chars import CharRef, check_known, lookup, parse_refs
-from vidflow.quick.model import (IMAGE_EXTS, STAGES, Beat, Beats, Idea, QuickProject, Review, image_name,
+from vidflow.quick.model import (IMAGE_EXTS, PROVIDERS, STAGES, Beat, Beats, Idea, LimitHit, QuickProject, Review, image_name,
                                  load_beats, load_quick, require_beats, save_beats, save_quick)
 from vidflow.quick.preset import Preset, load_preset
 
@@ -187,7 +188,37 @@ def clear_errors(root: Path, ns: list[int] | None = None, *, clip: bool = False)
     return count
 
 
-def set_image(root: Path, n: int, src: Path) -> Beat:
+def check_provider(name: str) -> str:
+    if name not in PROVIDERS:
+        raise VidflowError(f"Nguồn gen không hợp lệ: {name!r} (chọn: {', '.join(PROVIDERS)}).")
+    return name
+
+
+def record_limit(root: Path, provider: str, kind: str, reason: str = "") -> QuickProject:
+    """Agent báo nguồn hết lượt / đòi trả phí. Job đang chạy sẽ kết thúc mã 3."""
+    check_provider(provider)
+    if kind not in ("image", "video"):
+        raise VidflowError("kind phải là image hoặc video.")
+    q = load_quick(root)
+    q.limits.append(LimitHit(provider=provider, kind=kind, reason=reason.strip(),
+                             at=datetime.now().isoformat(timespec="seconds")))
+    save_quick(root, q)
+    return q
+
+
+def clear_limits(root: Path, provider: str) -> int:
+    """Xóa các mốc hết lượt của một nguồn (khi bắt đầu job mới với nguồn đó). Trả số mục đã xóa."""
+    q = load_quick(root)
+    before = len(q.limits)
+    q.limits = [x for x in q.limits if x.provider != provider]
+    if len(q.limits) != before:
+        save_quick(root, q)
+    return before - len(q.limits)
+
+
+def set_image(root: Path, n: int, src: Path, *, provider: str = "") -> Beat:
+    if provider:
+        check_provider(provider)
     root, src = Path(root), Path(src)
     if not src.is_file():
         raise VidflowError(f"Không thấy file ảnh {src}")
@@ -205,7 +236,7 @@ def set_image(root: Path, n: int, src: Path) -> Beat:
         shutil.copyfile(src, dest)
     if beat.image and beat.image != rel and beat.image.startswith("images/"):
         (root / beat.image).unlink(missing_ok=True)
-    beat.image, beat.status, beat.error = rel, "ok", ""
+    beat.image, beat.status, beat.error, beat.provider = rel, "ok", "", provider
     if beat.clip.status == "ok":
         beat.clip.status = "redo"  # clip cũ dựng từ ảnh cũ
     save_beats(root, beats)
@@ -230,7 +261,8 @@ def mark_redo(root: Path, ns: list[int], *, clip: bool = False) -> Beats:
 
 def update_settings(root: Path, *, image_model: str | None = None, video_model: str | None = None,
                     resolution: str | None = None, max_clips: int | None = None, allow_cont: bool | None = None,
-                    channel_chars: list[str] | None = None) -> QuickProject:
+                    channel_chars: list[str] | None = None, image_provider: str | None = None,
+                    video_provider: str | None = None) -> QuickProject:
     """Cài đặt Flow + giới hạn clip + nối cảnh + nhân vật bộ kênh dùng trong video."""
     q = load_quick(root)
     if max_clips is not None:
@@ -265,6 +297,10 @@ def update_settings(root: Path, *, image_model: str | None = None, video_model: 
             raise VidflowError(f"Không bỏ được nhân vật bộ kênh đang dùng trong prompt: "
                                f"{', '.join('@' + i for i in stranded)}")
         q.channel_chars = list(channel_chars)
+    if image_provider is not None:
+        q.flow.image_provider = check_provider(image_provider)
+    if video_provider is not None:
+        q.flow.video_provider = check_provider(video_provider)
     save_quick(root, q)
     return q
 
@@ -354,6 +390,8 @@ def status_summary(root: Path) -> dict:
         "errors": sum(1 for b in bl if b.error),
         "chars_missing": chars_missing,
         "allow_cont": q.allow_cont,
+        "providers": {"image": q.flow.image_provider, "video": q.flow.video_provider},
+        "limits": [x.model_dump() for x in q.limits],
         "clips": {"max": q.max_clips, "enabled": sum(1 for b in bl if b.clip.enabled),
                   "ok": sum(1 for b in bl if b.clip.status == "ok"),
                   "error": sum(1 for b in bl if b.clip.status == "error")},
@@ -372,6 +410,9 @@ def format_status(s: dict) -> str:
     c = s["clips"]
     if c["enabled"]:
         lines.append(f"Clip: {c['ok']}/{c['enabled']} xong (tối đa {c['max']}) · lỗi {c['error']}")
+    for x in s.get("limits", []):
+        what = "ảnh" if x["kind"] == "image" else "clip"
+        lines.append(f"Hết lượt {what} ở {x['provider']} ({x['at']})" + (f": {x['reason']}" if x["reason"] else ""))
     if s["voice_s"] is not None:
         m, sec = divmod(s["voice_s"], 60)
         lines.append(f"Giọng đọc: {int(m)}:{sec:05.2f}")

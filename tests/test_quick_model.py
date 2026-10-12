@@ -55,8 +55,9 @@ def test_beats_roundtrip_matches_spec_shape(tmp_path):
         {"n": 1, "start": 0.0, "end": 2.31, "text": "Bạn bước vào bếp.", "prompt": "P",
          "image": "images/001_00-00.jpg", "review": {"verdict": "pass", "score": 8, "issues": []}, "status": "ok",
          "refs": [], "cont": False,
-         "clip": {"enabled": False, "prompt": "", "review": None, "file": None, "status": "pending", "error": ""},
-         "error": ""}]}
+         "clip": {"enabled": False, "prompt": "", "review": None, "file": None, "status": "pending", "error": "",
+                  "provider": ""},
+         "error": "", "provider": ""}]}
     assert load_beats(tmp_path) == b
 
 
