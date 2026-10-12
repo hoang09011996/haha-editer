@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import re
+import os
 import shutil
+import tempfile
 import wave
 from array import array
 from datetime import datetime
@@ -10,9 +12,11 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
+from starlette.datastructures import UploadFile
 
 from vidflow.errors import VidflowError
 from vidflow.quick import chars, clips, ops
@@ -42,20 +46,23 @@ def sniff_image(data: bytes) -> str | None:
 
 def waveform(path: Path, bins: int) -> tuple[list[float], float]:
     """Đỉnh biên độ (0–1) của WAV 16-bit chia thành tối đa `bins` đoạn, và độ dài (giây)."""
-    with wave.open(str(path), "rb") as w:
-        if w.getsampwidth() != 2:
-            raise VidflowError(f"{path}: cần WAV 16-bit")
-        frames, rate = w.getnframes(), w.getframerate()
-        per = max(1, -(-frames // bins))
-        peaks: list[float] = []
-        while True:
-            data = w.readframes(per)
-            if not data:
-                break
-            a = array("h")
-            a.frombytes(data[: len(data) // 2 * 2])
-            peaks.append(round(max(max(a), -min(a)) / 32768, 3) if len(a) else 0.0)
-    return peaks, round(frames / rate, 3)
+    try:
+        with wave.open(str(path), "rb") as w:
+            if w.getsampwidth() != 2:
+                raise VidflowError(f"{path}: cần WAV 16-bit")
+            frames, rate = w.getnframes(), w.getframerate()
+            per = max(1, -(-frames // bins))
+            peaks: list[float] = []
+            while True:
+                data = w.readframes(per)
+                if not data:
+                    break
+                a = array("h")
+                a.frombytes(data[: len(data) // 2 * 2])
+                peaks.append(round(max(max(a), -min(a)) / 32768, 3) if len(a) else 0.0)
+    except (wave.Error, EOFError):
+        raise VidflowError("audio/voice.wav hỏng hoặc đang được ghi — thử lại sau.") from None
+    return peaks, round(frames / rate, 3) if rate else 0.0
 
 
 def media_url(root: Path, name: str, rel: str | None) -> str | None:
@@ -425,28 +432,50 @@ def quick_router(projects_root: Path, runner: JobRunner, reviews: ReviewRunner) 
         return {"n": req.n, "clip": req.clip, "review": rv.model_dump(), "summary": lines[-1] if lines else ""}
 
 
-    @router.post("/api/quick/{name}/chars/{char_id}/image")
-    def upload_char_image(name: str, char_id: str, file: UploadFile = File(...)):
-        root = qroot(name)
-        known = _do(lookup, root)
-        if not CHAR_RE.match(char_id) or char_id not in known:
-            raise HTTPException(404, f"Không có nhân vật @{char_id}")
+    def too_big() -> HTTPException:
+        return HTTPException(413, f"Ảnh quá {MAX_UPLOAD // (1024 * 1024)} MB.")
+
+    def save_char_image(name: str, char_id: str, root: Path, known: dict, file: UploadFile) -> dict:
         if not IMAGE_EXTS.get(Path(file.filename or "").suffix.lower()):
             raise HTTPException(422, "Chỉ nhận ảnh png, jpg hoặc webp.")
         data = file.file.read(MAX_UPLOAD + 1)
         if len(data) > MAX_UPLOAD:
-            raise HTTPException(413, f"Ảnh quá {MAX_UPLOAD // (1024 * 1024)} MB.")
+            raise too_big()
         ext = sniff_image(data)
         if ext is None:
             raise HTTPException(422, "File không phải ảnh png/jpg/webp.")
-        tmp = root / "tmp" / f"upload-{char_id}{ext}"
-        tmp.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_bytes(data)
+        (root / "tmp").mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(dir=root / "tmp", prefix=f"upload-{char_id}-", suffix=ext)
+        tmp = Path(tmp_name)
         try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
             _do(chars.set_char_image, root, char_id, tmp, channel=known[char_id].scope == "channel")
         finally:
             tmp.unlink(missing_ok=True)
-        return {"image_url": char_url(name, load_quick(root).preset, lookup(root).get(char_id))}
+        return {"image_url": char_url(name, load_quick(root).preset, _do(lookup, root).get(char_id))}
+
+    @router.post("/api/quick/{name}/chars/{char_id}/image")
+    async def upload_char_image(name: str, char_id: str, request: Request):
+        """Multipart, trường `file`. Chặn theo Content-Length trước khi đọc form; vẫn kiểm lại sau khi đọc."""
+        root = qroot(name)
+        known = await run_in_threadpool(_do, lookup, root)
+        if not CHAR_RE.match(char_id) or char_id not in known:
+            raise HTTPException(404, f"Không có nhân vật @{char_id}")
+        try:
+            length = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            raise HTTPException(400, "Content-Length không hợp lệ.")
+        if length > MAX_UPLOAD + 65536:
+            raise too_big()
+        form = await request.form()
+        try:
+            file = form.get("file")
+            if not isinstance(file, UploadFile):
+                raise HTTPException(422, "Thiếu file ảnh (trường 'file').")
+            return await run_in_threadpool(save_char_image, name, char_id, root, known, file)
+        finally:
+            await form.close()
 
     @router.get("/api/quick/{name}/waveform")
     def waveform_ep(name: str, bins: int = Query(300, ge=20, le=2000)):

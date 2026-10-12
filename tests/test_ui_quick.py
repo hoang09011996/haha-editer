@@ -528,6 +528,8 @@ def test_upload_validation(env, monkeypatch):
     assert r.status_code == 422 and "không phải ảnh" in r.json()["detail"]
     assert up("GHOST", "f.png", PNG).status_code == 404
     assert up("bad-id", "f.png", PNG).status_code == 404
+    r = env.c.post("/api/quick/vid/chars/FARMER/image", data={"other": "x"})
+    assert r.status_code == 422 and "Thiếu file" in r.json()["detail"]
     monkeypatch.setattr(qa, "MAX_UPLOAD", 10)
     assert up("FARMER", "f.png", PNG).status_code == 413
     assert not any((env.root / "refs").iterdir())
@@ -547,3 +549,39 @@ def test_waveform(env):
     assert r["peaks"][0] == 0.0 and r["peaks"][-1] == 0.5
     assert env.c.get("/api/quick/vid/waveform?bins=5").status_code == 422
     assert env.c.get("/api/quick/vid").json()["voice_url"].startswith("/media/vid/audio/voice.wav?v=")
+
+
+def test_upload_uses_unique_temp_files(env, monkeypatch):
+    chars.set_chars(env.root, [FARMER])
+    seen = []
+    real = chars.set_char_image
+
+    def spy(root, cid, src, **kw):
+        seen.append(src)
+        assert src.parent == env.root / "tmp" and src.read_bytes() == PNG
+        return real(root, cid, src, **kw)
+
+    monkeypatch.setattr(chars, "set_char_image", spy)
+    for _ in range(2):
+        r = env.c.post("/api/quick/vid/chars/FARMER/image", files={"file": ("f.png", PNG, "image/png")})
+        assert r.status_code == 200, r.text
+    assert len(seen) == 2 and seen[0].suffix == ".png" and seen[0].name != "upload-FARMER.png"
+    assert list((env.root / "tmp").iterdir()) == []
+
+
+def test_upload_rejects_large_content_length_before_reading(env, monkeypatch):
+    import vidflow.ui.quick_api as qa
+
+    chars.set_chars(env.root, [FARMER])
+    monkeypatch.setattr(qa, "MAX_UPLOAD", 100)  # PNG (40 byte) lọt qua kiểm tra sau khi đọc
+    body = b"--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.png\"\r\n\r\n" + PNG + b"\r\n--x--\r\n"
+    r = env.c.post("/api/quick/vid/chars/FARMER/image", content=body,
+                   headers={"Content-Type": "multipart/form-data; boundary=x", "Content-Length": str(100 + 65536 + 1)})
+    assert r.status_code == 413 and "MB" in r.json()["detail"]
+    assert not any((env.root / "refs").iterdir())
+
+
+def test_waveform_broken_wav_is_422(env):
+    (env.root / "audio" / "voice.wav").write_bytes(b"RIFF\x00\x00garbage")
+    r = env.c.get("/api/quick/vid/waveform")
+    assert r.status_code == 422 and "hỏng" in r.json()["detail"]
