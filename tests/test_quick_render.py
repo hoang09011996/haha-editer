@@ -203,12 +203,25 @@ def test_write_props_and_public_dir(qroot, img):
     assert json.loads(path.read_text(encoding="utf-8")) == plan.props
     public = qroot / "tmp" / "render" / "public"
     link = public / "images" / "001_00-00.png"
-    assert link.is_symlink() and link.resolve() == (qroot / "images" / "001_00-00.png").resolve()
+    # file thường (hard link) — server của Remotion trả 404 cho symlink
+    assert not link.is_symlink() and link.samefile(qroot / "images" / "001_00-00.png")
     assert not (public / "out").exists() and not (public / "images" / "002_00-04.png").exists()
     (public / "stray.txt").write_text("x")
     rq.write_render_props(qroot)
     assert not (public / "stray.txt").exists()                     # dựng lại sạch
     assert (qroot / "images" / "001_00-00.png").read_bytes()       # file thật còn nguyên
+
+
+def test_public_dir_copies_when_hard_link_fails(qroot, img, monkeypatch):
+    with_images(qroot, img, ns=(1,))
+
+    def no_link(src, dst):
+        raise OSError(18, "Cross-device link")
+
+    monkeypatch.setattr(rq.os, "link", no_link)
+    rq.write_render_props(qroot)
+    f = qroot / "tmp" / "render" / "public" / "images" / "001_00-00.png"
+    assert not f.is_symlink() and f.read_bytes() == (qroot / "images" / "001_00-00.png").read_bytes()
 
 
 def test_next_output_versions(qroot):
@@ -248,6 +261,30 @@ def test_render_failure_leaves_no_output(qroot, img, remotion):
         rq.render_quick(qroot, run=run, remotion_dir=remotion, npx="npx")
     assert list((qroot / "out").glob("*.mp4")) == []
     assert rq.next_output(qroot).name == "vid-v1.mp4"
+
+
+def test_render_oserror_is_vidflow_error_and_leaves_no_output(qroot, img, remotion):
+    with_images(qroot, img)
+
+    def run(cmd, **kw):
+        Path(cmd[5]).write_bytes(b"half")
+        raise OSError("exec format error")
+
+    with pytest.raises(VidflowError, match="Không chạy được Remotion"):
+        rq.render_quick(qroot, run=run, remotion_dir=remotion, npx="npx")
+    assert list((qroot / "out").glob("*.mp4")) == []
+
+
+def test_render_interrupt_reraises_and_leaves_no_output(qroot, img, remotion):
+    with_images(qroot, img)
+
+    def run(cmd, **kw):
+        Path(cmd[5]).write_bytes(b"half")
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        rq.render_quick(qroot, run=run, remotion_dir=remotion, npx="npx")
+    assert list((qroot / "out").glob("*.mp4")) == []
 
 
 def test_render_requires_remotion_install_and_npx(qroot, img, remotion, tmp_path, monkeypatch):

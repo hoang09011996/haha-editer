@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -188,15 +189,20 @@ def build_render_props(root: Path, opts: RenderOptions | None = None, *,
 
 
 def stage_public(root: Path, assets: dict[str, Path]) -> Path:
-    """Public dir cho Remotion: chỉ symlink tới đúng các file cần, cùng đường dẫn tương đối như trong project.
-    (Remotion copy cả public dir vào bundle mỗi lần render — trỏ thẳng vào project sẽ copy cả out/.)"""
+    """Public dir cho Remotion: chỉ đúng các file cần, cùng đường dẫn tương đối như trong project.
+    (Remotion copy cả public dir vào bundle mỗi lần render — trỏ thẳng vào project sẽ copy cả out/.)
+    Dùng hard link (khác ổ đĩa → copy), KHÔNG symlink: server của Remotion trả 404 cho symlink."""
     public = Path(root) / PUBLIC_DIR
-    shutil.rmtree(public, ignore_errors=True)  # chỉ xóa symlink, không đụng file thật
+    shutil.rmtree(public, ignore_errors=True)  # chỉ xóa link/bản sao, không đụng file thật
     public.mkdir(parents=True, exist_ok=True)
     for rel, src in assets.items():
         dest = public / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.symlink_to(Path(src).resolve())
+        src = Path(src).resolve()
+        try:
+            os.link(src, dest)
+        except OSError:
+            shutil.copy2(src, dest)
     return public
 
 
@@ -239,8 +245,14 @@ def render_quick(root: Path, opts: RenderOptions | None = None, *, run: Callable
     props_path, plan = write_render_props(root, opts, probe=probe)
     out = next_output(root)
     out.parent.mkdir(parents=True, exist_ok=True)
-    rc = run(render_cmd(npx, out, props_path, root / PUBLIC_DIR), cwd=remotion_dir,
-             stdin=subprocess.DEVNULL).returncode
+    try:
+        rc = run(render_cmd(npx, out, props_path, root / PUBLIC_DIR), cwd=remotion_dir,
+                 stdin=subprocess.DEVNULL).returncode
+    except BaseException as e:  # kể cả Ctrl-C: không để lại file dở dang
+        out.unlink(missing_ok=True)
+        if isinstance(e, OSError):
+            raise VidflowError(f"Không chạy được Remotion ({e}) — kiểm tra Node.js/`npx`.") from e
+        raise
     if rc or not out.is_file():
         out.unlink(missing_ok=True)  # không để lại file dở dang
         raise VidflowError(f"Remotion render lỗi (mã {rc}) — xem log phía trên; props: {props_path}")

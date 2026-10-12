@@ -92,13 +92,15 @@ const LogoView: React.FC<{ src: string; short: number }> = ({ src, short }) => (
   </AbsoluteFill>
 );
 
-export const DoodleVideo: React.FC<VideoProps> = ({ fps, width, height, beats, audio, subtitles, zoom, clipVolume, logo, music, musicVolume }) => {
+export const DoodleVideo: React.FC<VideoProps> = ({ fps, width, height, duration, beats, audio, subtitles, zoom, clipVolume, logo, music, musicVolume }) => {
   const short = Math.min(width, height);
+  const total = Math.max(1, Math.ceil(duration * fps)); // = durationInFrames của Composition (Root.tsx)
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
       {beats.map((shot, i) => {
         const from = toFrames(shot.start, fps);
-        const frames = Math.max(1, toFrames(shot.end, fps) - from);
+        // mốc cuối chạy tới hết composition (ceil) — tránh 1–2 khung nền trống do làm tròn
+        const frames = Math.max(1, (i === beats.length - 1 ? total : toFrames(shot.end, fps)) - from);
         const next = beats[i + 1];
         const overlap = next ? toFrames(next.fade, fps) : 0; // mốc sau mờ dần đè lên mốc này → không lộ nền
         return (
