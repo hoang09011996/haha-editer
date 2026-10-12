@@ -105,3 +105,9 @@ def test_cli_clip_commands(qroot, P, img, tmp_path):
     assert r.exit_code == 0, r.output
     r = runner.invoke(app, ["quick", "clip", "-p", str(qroot), "maybe", "1"])
     assert r.exit_code == 1 and "Traceback" not in r.output
+
+
+def test_status_exposes_allow_cont(qroot):
+    assert ops.status_summary(qroot)["allow_cont"] is True
+    ops.update_settings(qroot, allow_cont=False)
+    assert ops.status_summary(qroot)["allow_cont"] is False

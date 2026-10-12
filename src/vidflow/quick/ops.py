@@ -343,6 +343,7 @@ def status_summary(root: Path) -> dict:
         "blocked": blocked,
         "errors": sum(1 for b in bl if b.error),
         "chars_missing": chars_missing,
+        "allow_cont": q.allow_cont,
         "clips": {"max": q.max_clips, "enabled": sum(1 for b in bl if b.clip.enabled),
                   "ok": sum(1 for b in bl if b.clip.status == "ok"),
                   "error": sum(1 for b in bl if b.clip.status == "error")},

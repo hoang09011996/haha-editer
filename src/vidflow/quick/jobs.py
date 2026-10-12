@@ -53,7 +53,7 @@ def claude_task(kind: str, project_root: Path, preset: Preset) -> str:
     if kind == "prompts":
         return (f"Bạn là quick-writer (bước prompt ảnh + clip). Đọc và tuân thủ {writer}. {common} "
                 f"Lấy mốc bằng `{cli} beats -p {root} --json`, nhân vật bằng `{cli} chars -p {root} --json`, "
-                f"cài đặt (max_clips, allow_cont) bằng `{cli} status -p {root} --json`. Viết image prompt cho mọi mốc "
+                f"cài đặt (clips.max, clips.enabled, allow_cont) bằng `{cli} status -p {root} --json`. Viết image prompt cho mọi mốc "
                 "chưa có prompt đạt (review trống hoặc fail) theo Giai đoạn 3 của brief: mỗi prompt = câu neo đầu NGUYÊN VĂN "
                 f"«{preset.style_anchor_start}» + mô tả cảnh bằng tiếng Anh + câu neo cuối NGUYÊN VĂN "
                 f"«{preset.style_anchor_end}». Không thêm mốc [MM:SS] vào prompt. Mọi nhân vật đã khai báo phải nhắc "

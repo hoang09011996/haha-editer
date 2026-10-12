@@ -34,7 +34,7 @@ Lấy mốc: `uv run vidflow quick beats -p <project> --json` (n, start, text, p
 - Cấu trúc: `<câu neo đầu nguyên văn> <mô tả cảnh TIẾNG ANH> <câu neo cuối nguyên văn>`. Không thêm `[MM:SS]`, không tham số kiểu `--ar`. CLI từ chối prompt sai câu neo.
 - Đọc cả các mốc trước/sau: giữ cảnh qua các mốc liên tiếp cùng một khoảnh khắc (chỉ đổi biểu cảm / thêm 1 chi tiết), giữ MỘT ẩn dụ hình ảnh xuyên suốt tập.
 - Nhân vật đã khai báo (`quick chars --json`) PHẢI nhắc bằng `@ID` (IN HOA, đúng id) ở chỗ mô tả nhân vật, ví dụ `@MODERNYOU buried under a blanket`. Không mô tả lại ngoại hình mâu thuẫn với `desc`; chỉ tả biểu cảm/hành động. CLI tự tách `@ID` và từ chối id lạ hoặc viết thường.
-- Nối cảnh: mốc tiếp nối CÙNG khoảnh khắc với mốc liền trước (cùng bối cảnh, chỉ đổi biểu cảm/thêm 1 chi tiết) → thêm `"cont": true` (khi `allow_cont` trong `quick status --json` là true). Đổi cảnh/đổi bối cảnh → không `cont`. Mốc 1 không bao giờ `cont`.
+- Nối cảnh: mốc tiếp nối CÙNG khoảnh khắc với mốc liền trước (cùng bối cảnh, chỉ đổi biểu cảm/thêm 1 chi tiết) → thêm `"cont": true` (chỉ khi `allow_cont` trong `quick status --json` là true). Đổi cảnh/đổi bối cảnh → không `cont`. Mốc 1 không bao giờ `cont`.
 
 Tự kiểm duyệt NGAY sau khi viết mỗi prompt (bạn đóng vai prompt-reviewer độc lập — chấm thật, không nương tay). Bảng kiểm, điểm 0–10:
 1. Câu neo đầu/cuối đúng nguyên văn; phần giữa tiếng Anh tự nhiên, cụ thể.
