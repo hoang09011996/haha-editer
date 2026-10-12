@@ -136,6 +136,8 @@ def promote(root: Path, char_id: str) -> Preset:
     c = next((x for x in q.characters if x.id == char_id), None)
     if c is None:
         raise VidflowError(f"Video không có nhân vật riêng @{char_id}.")
+    if char_id in {x.id for x in preset.characters}:
+        raise VidflowError(f"Bộ kênh {preset.id} đã có nhân vật @{char_id}.")
     preset.characters.append(c)
     save_preset(preset)
     img = find_image(root / VIDEO_REFS, char_id)

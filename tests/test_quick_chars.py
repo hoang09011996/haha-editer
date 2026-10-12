@@ -7,7 +7,8 @@ from vidflow.cli import app
 from vidflow.errors import VidflowError
 from vidflow.quick import chars, ops
 from vidflow.quick.model import load_beats, load_quick
-from vidflow.quick.preset import load_preset
+from vidflow.quick.model import Character
+from vidflow.quick.preset import load_preset, save_preset
 
 runner = CliRunner()
 FARMER = {"id": "FARMER", "name": "Nông dân", "desc": "hunched neolithic farmer, rough tunic", "color": "#8B5E3C"}
@@ -102,3 +103,17 @@ def test_cli_chars_commands(qroot, tmp_path, img):
     assert {d["id"] for d in data} == {"MODERNYOU", "FARMER"}
     r = runner.invoke(app, ["quick", "char-image", "-p", str(qroot), "NOBODY", str(img())])
     assert r.exit_code == 1 and "Traceback" not in r.output
+
+
+def test_promote_refuses_duplicate_in_channel(qroot, img, quick_presets):
+    chars.set_chars(qroot, [FARMER])
+    chars.set_char_image(qroot, "FARMER", img())
+    preset = load_preset("doodle-giai-ma")
+    preset.characters.append(Character(id="FARMER", desc="x"))
+    save_preset(preset)
+    with pytest.raises(VidflowError, match="đã có"):
+        chars.promote(qroot, "FARMER")
+    assert [c.id for c in load_quick(qroot).characters] == ["FARMER"]
+    assert [c.id for c in load_preset("doodle-giai-ma").characters].count("FARMER") == 1
+    assert (qroot / "refs" / "FARMER.png").is_file()
+    assert not (quick_presets / "refs" / "doodle-giai-ma" / "FARMER.png").exists()
