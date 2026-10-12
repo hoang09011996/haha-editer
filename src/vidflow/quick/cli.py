@@ -10,7 +10,7 @@ import typer
 
 from vidflow.config import load_config
 from vidflow.errors import VidflowError
-from vidflow.quick import jobs, ops
+from vidflow.quick import chars, jobs, ops
 from vidflow.quick.model import create_quick, load_quick, require_beats
 from vidflow.quick.preset import import_preset, list_presets, load_preset
 
@@ -163,6 +163,41 @@ def build(project: ProjectOpt, name: Annotated[Optional[str], typer.Option(help=
 
 
 # ---- helper cho job Claude ----
+
+@_cmd(quick_app, "set-chars")
+def set_chars(project: ProjectOpt, json_file: JsonFile):
+    """Ghi nhân vật riêng của video [{id, name, desc, color}]."""
+    q = chars.set_chars(project, _read_json(json_file))
+    typer.echo(f"Đã ghi {len(q.characters)} nhân vật: {', '.join('@' + c.id for c in q.characters)}")
+
+
+@_cmd(quick_app, "char-image")
+def char_image(project: ProjectOpt, char_id: Annotated[str, typer.Argument(help="ID nhân vật (IN HOA)")],
+               file: Annotated[Path, typer.Argument()],
+               channel: Annotated[bool, typer.Option("--channel", help="Nhân vật của bộ kênh")] = False):
+    """Gắn ảnh character sheet cho nhân vật."""
+    dest = chars.set_char_image(project, char_id, file, channel=channel)
+    typer.echo(f"@{char_id} → {dest}")
+
+
+@_cmd(quick_app, "chars")
+def chars_list(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")] = False):
+    """Liệt kê nhân vật (bộ kênh + video), ảnh, số mốc dùng, số mốc bị chặn."""
+    rows = chars.char_rows(project)
+    if json_out:
+        typer.echo(json.dumps(rows, ensure_ascii=False, indent=1))
+        return
+    for r in rows:
+        img = "có ảnh" if r["image"] else f"THIẾU ẢNH (chặn {r['blocked']})"
+        typer.echo(f"@{r['id']:<14} {r['scope']:<7} {r['uses']:>3} mốc · {img} · {r['desc'][:50]}")
+
+
+@_cmd(quick_app, "promote")
+def promote(project: ProjectOpt, char_id: Annotated[str, typer.Argument()]):
+    """Đưa nhân vật riêng của video vào bộ kênh."""
+    p = chars.promote(project, char_id)
+    typer.echo(f"@{char_id} đã thuộc bộ kênh {p.id}")
+
 
 @_cmd(quick_app, "set-ideas")
 def set_ideas(project: ProjectOpt, json_file: JsonFile):
