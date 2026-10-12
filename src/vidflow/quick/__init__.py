@@ -6,7 +6,9 @@ Hàm cho UI:
 - thao tác: `ops.set_ideas / pick_idea / set_beat_texts / set_prompt(s) / edit_prompt / set_review / set_image /
   mark_redo / record_fail / clear_errors / update_settings / list_beats / status_summary`
 - nhân vật: `chars.lookup / char_rows / set_chars / set_char_image / promote / parse_refs`
-- clip: `clips.set_clip_enabled / set_clip_prompts / set_clip / clip_todo`
+- clip: `clips.set_clip_enabled / set_clip_prompts / set_clip / clip_todo / ready_clips`
+- xuất MP4: `render.RenderOptions`, `render.build_render_props(root, opts)` (props thuần),
+  `render.write_render_props`, `render.render_quick(root, opts)` → out/<tên>-vN.mp4
 - việc nền: `jobs.claude_cmd(kind, root, preset)` (kind ∈ jobs.QUICK_KINDS; jobs.CHROME_KINDS cần Chrome),
-  `jobs.review_cmd(root, preset, n, clip=)`, `voice.run_voice`, `build.build_quick`
+  `jobs.review_cmd(root, preset, n, clip=)`, `voice.run_voice`, `build.build_quick` (draft CapCut, nhận clip)
 """
