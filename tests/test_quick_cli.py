@@ -115,8 +115,8 @@ def test_set_image_and_redo(qp, tmp_path):
     ok(["quick", "set-beats", "-p", qp, "--json", _texts(tmp_path, ["A.", "B.", "C."])])
     src = tmp_path / "dl.jpeg"
     src.write_bytes(b"\xff\xd8img")
-    r = fail(["quick", "set-image", "-p", qp, 2, src])
-    assert "voice" in r.output  # chưa có mốc thời gian
+    ok(["quick", "set-image", "-p", qp, 2, src])  # chưa có giọng đọc: tên tạm NNN
+    assert load_beats(qp).beats[1].image == "images/002.jpg"
     _timed(qp, [0.0, 125.4, 130.0])
     ok(["quick", "set-image", "-p", qp, 2, src])
     b = load_beats(qp)

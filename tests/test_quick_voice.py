@@ -154,3 +154,24 @@ def test_voice_rejects_text_changed_mid_run(qroot):
         run(qroot, SideEffectSpeech(lambda: ops.set_beat_texts(qroot, ["Khác hẳn."], aspect="16:9")))
     b = load_beats(qroot).beats
     assert [x.text for x in b] == ["Khác hẳn."] and b[0].start is None
+
+
+def test_images_before_voice_renamed_after_voice(qroot, tmp_path):
+    from vidflow.quick import ops
+    from vidflow.quick.model import Review
+
+    b = load_beats(qroot)
+    for x in b.beats:
+        x.prompt, x.review = "p", Review(verdict="pass", score=8)
+    save_beats(qroot, b)
+    todo = ops.list_beats(qroot, todo=True)
+    assert [r["n"] for r in todo["beats"]] == [1, 2, 3, 4, 5]  # gen ảnh không cần chờ giọng đọc
+    assert todo["beats"][1]["file"] == "images/002.jpg"
+    src = tmp_path / "a.png"
+    src.write_bytes(b"\x89PNGx")
+    assert ops.set_image(qroot, 2, src).image == "images/002.png"
+    run(qroot, FakeSpeech())
+    beat = load_beats(qroot).beats[1]
+    assert beat.image.startswith("images/002_00-") and beat.image.endswith(".png")
+    assert (qroot / beat.image).read_bytes() == b"\x89PNGx"
+    assert not (qroot / "images" / "002.png").exists()

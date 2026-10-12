@@ -254,9 +254,7 @@ def set_image(root: Path, n: int, src: Path, *, provider: str = "") -> Beat:
         raise VidflowError(f"Định dạng ảnh không hỗ trợ: {src.suffix} (dùng jpg/png/webp)")
     beats = require_beats(root)
     beat = beats.get(n)
-    if beat.start is None:
-        raise VidflowError("Mốc chưa có thời gian — chạy `vidflow quick voice` trước khi gắn ảnh.")
-    rel = f"images/{image_name(n, beat.start)}{ext}"
+    rel = f"images/{media_stem(n, beat.start)}{ext}"  # chưa có giọng đọc → tên tạm NNN, đổi tên khi đọc xong
     dest = root / rel
     dest.parent.mkdir(parents=True, exist_ok=True)
     if src.resolve() != dest.resolve():
@@ -336,8 +334,26 @@ def update_settings(root: Path, *, image_model: str | None = None, video_model: 
     return q
 
 
-def beat_file(beat: Beat) -> str | None:
-    return None if beat.start is None else f"images/{image_name(beat.n, beat.start)}.jpg"
+def media_stem(n: int, start: float | None) -> str:
+    """Tên file ảnh của mốc: NNN_MM-SS khi đã có mốc thời gian, NNN khi chưa có giọng đọc."""
+    return f"{n:03d}" if start is None else image_name(n, start)
+
+
+def rename_media(root: Path, beats: Beats) -> None:
+    """Sau khi điền mốc thời gian: đổi tên ảnh về NNN_MM-SS theo start mới (ảnh gen trước giọng đọc,
+    hoặc giọng đọc làm lại khiến mốc dịch). Gọi trong khóa project."""
+    for b in beats.beats:
+        if not (b.image and b.image.startswith("images/")):
+            continue
+        old = root / b.image
+        rel = f"images/{media_stem(b.n, b.start)}{old.suffix}"
+        if rel != b.image and old.is_file() and not (root / rel).exists():
+            old.rename(root / rel)
+            b.image = rel
+
+
+def beat_file(beat: Beat) -> str:
+    return f"images/{media_stem(beat.n, beat.start)}.jpg"
 
 
 def image_block(beat: Beat, prev: Beat | None, known: dict[str, CharRef]) -> str | None:
@@ -352,7 +368,7 @@ def image_block(beat: Beat, prev: Beat | None, known: dict[str, CharRef]) -> str
 
 def _wants_image(b: Beat) -> bool:
     return (b.status in ("pending", "redo") and bool(b.prompt) and b.review is not None
-            and b.review.verdict in PASSING and b.start is not None and not b.error)
+            and b.review.verdict in PASSING and not b.error)  # không cần giọng đọc: tên tạm NNN
 
 
 def list_beats(root: Path, *, todo: bool = False) -> dict:

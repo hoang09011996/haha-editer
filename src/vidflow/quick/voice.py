@@ -18,7 +18,7 @@ from vidflow.config import Config
 from vidflow.errors import VidflowError
 from vidflow.media import ensure_wav
 from vidflow.quick.model import Beat, Beats, load_quick, project_lock, require_beats, save_beats
-from vidflow.quick.ops import VOICE_FILE, _advance, check_voice_mode
+from vidflow.quick.ops import VOICE_FILE, _advance, check_voice_mode, rename_media
 from vidflow.quick.preset import Preset, load_preset
 from vidflow.retry import with_retry
 from vidflow.state import atomic_write_text
@@ -355,6 +355,7 @@ def _merge(root: Path, beats: Beats, pieces: Callable[[list[Beat]], list[tuple[b
                 w.writeframes(pcm)
         beats.beats[0].start = 0.0  # video bắt đầu từ mốc 1 (giống cách đọc từng câu)
         tmp.replace(voice)
+        rename_media(root, beats)  # ảnh gen trước giọng đọc (NNN) → NNN_MM-SS
         save_beats(root, beats)
         _advance(root, "voiced")
     return frames / RATE
