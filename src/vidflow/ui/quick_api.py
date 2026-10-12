@@ -22,7 +22,7 @@ from vidflow.errors import VidflowError
 from vidflow.quick import chars, clips, ops
 from vidflow.quick.chars import CharRef, char_rows, lookup
 from vidflow.quick.jobs import review_cmd
-from vidflow.quick.model import CHAR_ID, IMAGE_EXTS, create_quick, is_quick, load_beats, load_quick, require_beats
+from vidflow.quick.model import CHAR_ID, IMAGE_EXTS, VoiceMode, create_quick, is_quick, load_beats, load_quick, require_beats
 from vidflow.quick.preset import ID_RE, channel_refs_dir, list_presets, load_preset
 from vidflow.ui.jobs import JobLaunchError, JobRunner, ReviewRunner
 from vidflow.ui.quick_jobs import check_quick_job
@@ -156,6 +156,7 @@ class NewQuick(BaseModel):
     video_provider: Provider = "flow"
     max_clips: int = Field(default=12, ge=0, le=200)
     allow_cont: bool = True
+    voice_mode: VoiceMode = "chunk"
     start: bool = True  # chạy job đề xuất ý tưởng ngay
 
 
@@ -168,6 +169,7 @@ class SettingsReq(BaseModel):
     max_clips: int | None = None
     allow_cont: bool | None = None
     channel_chars: list[str] | None = None
+    voice_mode: VoiceMode | None = None
 
 
 class PickReq(BaseModel):
@@ -329,7 +331,7 @@ def quick_router(projects_root: Path, runner: JobRunner, reviews: ReviewRunner) 
             ops.update_settings(root, image_model=req.image_model, video_model=req.video_model,
                                 resolution=req.resolution, image_provider=req.image_provider,
                                 video_provider=req.video_provider, max_clips=req.max_clips, allow_cont=req.allow_cont,
-                                channel_chars=req.channel_chars)
+                                channel_chars=req.channel_chars, voice_mode=req.voice_mode)
         except VidflowError as e:
             shutil.rmtree(root, ignore_errors=True)
             raise HTTPException(422, str(e))

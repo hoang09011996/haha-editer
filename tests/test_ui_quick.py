@@ -594,3 +594,27 @@ def test_jobs_launch_failure_is_clean_error(env):
     assert r.status_code == 503 and r.json()["detail"].startswith("Không chạy được lệnh:")
     env.runner.cmd = [sys.executable, "-c", "print('ok')"]
     assert env.c.post("/api/quick/vid/jobs", json={"kind": "voice"}).status_code == 202  # không kẹt trạng thái bận
+
+
+def test_voice_mode_settings_create_and_prompts_before_voice(env):
+    c, root = env.c, env.root
+    assert load_quick(root).voice_mode == "chunk"
+    assert c.post("/api/quick/vid/settings", json={"voice_mode": "full"}).status_code == 200
+    assert load_quick(root).voice_mode == "full"
+    assert c.get("/api/quick/vid").json()["status"]["voice_mode"] == "full"
+    assert c.post("/api/quick/vid/settings", json={"voice_mode": "nhanh"}).status_code == 422
+    r = c.post("/api/quick", json={"preset": "doodle-giai-ma", "name": "vm1", "max_clips": 0, "start": False,
+                                   "voice_mode": "per_beat"})
+    assert r.status_code == 201, r.text
+    assert load_quick(env.tmp / "vm1").voice_mode == "per_beat"
+    assert c.post("/api/quick", json={"preset": "doodle-giai-ma", "name": "vm2", "max_clips": 0, "start": False,
+                                      "voice_mode": "x"}).status_code == 422
+    assert not (env.tmp / "vm2").exists()
+    # viết prompt không cần chờ giọng đọc: mốc chưa có thời gian vẫn chạy được việc prompts
+    b = load_beats(root)
+    for x in b.beats:
+        x.start = x.end = None
+    from vidflow.quick.model import save_beats
+    save_beats(root, b)
+    assert c.post("/api/quick/vid/jobs", json={"kind": "prompts"}).status_code == 202
+    wait_idle(c)

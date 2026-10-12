@@ -203,6 +203,8 @@ function qBoardHead() {
       clipTodo ? h("button", { class: "primary", disabled: busy, onclick: () => qJob("clips") }, `Gen ${clipTodo} clip (${provLabel(qProvider("clips"))})`) : null,
       h("button", { onclick: () => { Q.sel = null; Q.render(); } }, "Cài đặt")));
 }
+const QVOICE = { chunk: "Theo đoạn ~20 câu (đề xuất)", full: "Cả bài một lượt", per_beat: "Từng câu (chính xác nhất, tốn lượt)" };
+const QVOICE_OPTS = Object.entries(QVOICE);
 function qNext() {
   const d = Q.data, st = d.status, q = d.quick, busy = S.job?.state === "running";
   const btn = (label, fn, primary = true) => h("button", { class: primary ? "primary" : "", disabled: busy, onclick: fn }, label);
@@ -215,7 +217,11 @@ function qNext() {
       h("button", { class: "primary small", disabled: busy, onclick: () => qPick(i + 1) }, "Chọn"))))),
     h("div", { class: "row" }, btn("Đề xuất lại", () => qJob("ideas"), false)));
   if (st.stage === "picked") return box("Bước 2 · Kịch bản", `Ý tưởng: ${st.picked_title}. AI viết lời dẫn, tách mốc và đề xuất nhân vật riêng.`, btn("Viết kịch bản + tách mốc", () => qJob("script")));
-  if (st.stage === "script") return box("Bước 3 · Giọng đọc", "Đọc từng mốc bằng Gemini TTS (gói miễn phí) và điền thời gian.", btn("Tạo giọng đọc", () => qJob("voice")));
+  const voiceText = `Đọc lời dẫn bằng Gemini TTS (gói miễn phí, ${QVOICE[q.voice_mode] || q.voice_mode}) và điền thời gian. Viết prompt không cần chờ giọng đọc.`;
+  if (st.stage === "script") return box("Bước 3 · Giọng đọc", voiceText,
+    btn("Tạo giọng đọc", () => qJob("voice")), st.beats.prompted < st.beats.total ? btn("Viết prompt ảnh + clip", () => qJob("prompts"), false) : null);
+  if (!st.beats.timed && st.beats.total) return box("Giọng đọc", "Cần giọng đọc để có thời gian từng mốc trước khi gen ảnh.", btn("Tạo giọng đọc", () => qJob("voice")),
+    st.beats.prompted < st.beats.total ? btn("Viết prompt ảnh + clip", () => qJob("prompts"), false) : null);
   if (st.beats.prompted < st.beats.total) return box("Bước 4 · Prompt", `${st.beats.prompted}/${st.beats.total} mốc có prompt đạt kiểm duyệt.`, btn("Viết prompt ảnh + clip", () => qJob("prompts")));
   if (st.chars_missing.length) return box("Nhân vật thiếu ảnh", `${st.chars_missing.map(c => "@" + c).join(", ")} chưa có character sheet — ${st.blocked} mốc đang bị chặn.`,
     btn(`Gen sheet (${provLabel(qProvider("sheets"))})`, () => qJob("sheets")), QSCREENS.chars ? btn("Mở Nhân vật", () => { Q.screen = "chars"; Q.render(); }, false) : null);
@@ -347,7 +353,7 @@ function qDetail(b) {
       h("button", { class: "secondary grow", disabled: rvImg, onclick: () => qSaveReview(b.n, false) }, "Lưu & kiểm duyệt")));
 }
 function qSettings() {
-  const q = Q.data.quick, f = { ...q.flow, max_clips: q.max_clips, allow_cont: q.allow_cont };
+  const q = Q.data.quick, f = { ...q.flow, max_clips: q.max_clips, allow_cont: q.allow_cont, voice_mode: q.voice_mode || "chunk" };
   const sel = (key, opts) => {
     const all = [...new Set([...opts, f[key] ?? ""])];
     const s = h("select", {}, all.map(o => h("option", { value: o }, o || "— chọn —")));
@@ -356,11 +362,12 @@ function qSettings() {
   const psel = key => { const s = h("select", {}, PROVIDERS.map(([v, l]) => h("option", { value: v }, l))); s.value = f[key] || "flow"; s.onchange = () => { f[key] = s.value; }; return s; };
   const max = h("input", { type: "number", min: 0, max: 200 }); max.value = f.max_clips; max.oninput = () => { f.max_clips = Number(max.value); };
   const cont = h("input", { type: "checkbox" }); cont.checked = f.allow_cont; cont.onchange = () => { f.allow_cont = cont.checked; };
+  const vsel = h("select", {}, QVOICE_OPTS.map(([v, l]) => h("option", { value: v }, l))); vsel.value = f.voice_mode; vsel.onchange = () => { f.voice_mode = vsel.value; };
   const name = Q.name;
   const save = async () => {
     if (f.max_clips > 0 && !f.video_model) { toast("Chọn model clip (bắt buộc khi số clip > 0).", true); return; }
     try {
-      await qPost("/settings", { image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider || "flow", video_provider: f.video_provider || "flow", max_clips: f.max_clips, allow_cont: f.allow_cont }, name);
+      await qPost("/settings", { image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider || "flow", video_provider: f.video_provider || "flow", max_clips: f.max_clips, allow_cont: f.allow_cont, voice_mode: f.voice_mode }, name);
       qSay(name, "Đã lưu cài đặt"); await qRefresh(name);
     } catch (e) { qSay(name, e.message, true); }
   };
@@ -372,6 +379,7 @@ function qSettings() {
     h("label", { class: "f" }, h("span", { class: "flabel" }, "Nguồn gen clip"), psel("video_provider")),
     h("label", { class: "f" }, h("span", { class: "flabel" }, "Số clip tối đa (0 = chỉ ảnh)"), max),
     h("label", { class: "checks" }, cont, "Cho phép nối cảnh"),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Cách đọc giọng"), vsel),
     h("button", { class: "primary", onclick: save }, "Lưu cài đặt"));
 }
 async function qSaveReview(n, clip) {
@@ -471,7 +479,7 @@ Q.openNew = async function () {
   let presets;
   try { presets = await api("/api/presets"); } catch (e) { toast(e.message, true); return; }
   if (!presets.length) { toast("Chưa có bộ kênh — tạo bằng lệnh `vidflow preset import`.", true); return; }
-  const f = { preset: presets[0].id, chars: [], image_model: IMAGE_MODELS[0], video_model: "", resolution: "720p", image_provider: "flow", video_provider: "flow", max_clips: 12, allow_cont: true };
+  const f = { preset: presets[0].id, chars: [], image_model: IMAGE_MODELS[0], video_model: "", resolution: "720p", image_provider: "flow", video_provider: "flow", max_clips: 12, allow_cont: true, voice_mode: "chunk" };
   const presetSel = h("select", {}, presets.map(p => h("option", { value: p.id }, p.name)));
   const topic = h("input", { type: "text", placeholder: "vd: một ngày bình thường của tổ tiên 50.000 năm trước" });
   const charsBox = h("div", { class: "pick-list" }), aspect = h("span", { class: "mono" });
@@ -493,6 +501,7 @@ Q.openNew = async function () {
   const vidLabel = h("label", { class: "f req" }, h("span", { class: "flabel" }, "Model clip động · bắt buộc"), pick("video_model", VIDEO_MODELS));
   range.oninput = () => { f.max_clips = Number(range.value); maxOut.textContent = range.value; vidLabel.classList.toggle("req", f.max_clips > 0); };
   const cont = h("input", { type: "checkbox" }); cont.checked = true; cont.onchange = () => { f.allow_cont = cont.checked; };
+  const vsel = h("select", {}, QVOICE_OPTS.map(([v, l]) => h("option", { value: v }, l))); vsel.value = f.voice_mode; vsel.onchange = () => { f.voice_mode = vsel.value; };
   const sec = (n, title, ...kids) => h("section", { class: "qsec" }, h("span", { class: "stepnum" }, String(n)), h("div", {}, h("h2", {}, title), kids));
   const dlg = h("dialog", { class: "qdlg", "aria-label": "Video nhanh mới" });
   dlg.addEventListener("close", () => dlg.remove());
@@ -503,7 +512,7 @@ Q.openNew = async function () {
     const p = presets.find(x => x.id === f.preset);
     const body = { preset: f.preset, topic: topic.value.trim(), channel_chars: f.chars.length === p.characters.length ? null : f.chars,
       image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider, video_provider: f.video_provider,
-      max_clips: f.max_clips, allow_cont: f.allow_cont, start: true };
+      max_clips: f.max_clips, allow_cont: f.allow_cont, voice_mode: f.voice_mode, start: true };
     okBtn.disabled = true; // tên thư mục tự sinh theo giây: bấm hai lần sẽ trùng (409)
     try {
       const r = await api("/api/quick", { method: "POST", body: JSON.stringify(body) });
@@ -530,7 +539,10 @@ Q.openNew = async function () {
       sec(4, "Chuyển động",
         h("label", { class: "f" }, h("span", { class: "flabel row between" }, "Số clip động tối đa", maxOut), range,
           h("span", { class: "hint" }, "AI đề xuất tối đa ngần này mốc làm clip; bạn bật/tắt từng mốc trên Bảng mốc. 0 = chỉ ảnh tĩnh.")),
-        h("label", { class: "checks" }, cont, h("span", {}, "Cho phép AI đánh dấu ", h("strong", {}, "nối cảnh"), " — mốc tiếp nối cùng khoảnh khắc được đính ảnh mốc trước làm tham chiếu.")))),
+        h("label", { class: "checks" }, cont, h("span", {}, "Cho phép AI đánh dấu ", h("strong", {}, "nối cảnh"), " — mốc tiếp nối cùng khoảnh khắc được đính ảnh mốc trước làm tham chiếu."))),
+      sec(5, "Giọng đọc",
+        h("label", { class: "f" }, h("span", { class: "flabel" }, "Cách đọc giọng"), vsel,
+          h("span", { class: "hint" }, "Gemini TTS gói miễn phí. Đọc theo đoạn tốn ít lượt hơn; từng câu chính xác nhất nhưng mỗi câu một lượt.")))),
     h("div", { class: "qdlg-f" }, h("button", { type: "button", onclick: () => dlg.close() }, "Hủy"),
       okBtn));
   document.body.append(dlg);
