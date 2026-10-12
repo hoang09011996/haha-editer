@@ -31,6 +31,7 @@ CHUNKS_AUDIO = "audio/chunks"
 INDEX = "index.json"
 CHUNK_BEATS = 20      # số mốc tối đa mỗi đoạn (chunk)
 CHUNK_CHARS = 1500    # số ký tự tối đa mỗi đoạn — vượt thì mở đoạn mới
+FULL_MAX_CHARS = 3000  # "cả bài một lượt" chỉ cho bài ngắn — bài dài Gemini dễ cắt/bỏ câu, lỗi thì mất cả lượt
 FRAME_S = 0.01        # khung phân tích âm lượng
 SILENCE_REL = 0.05    # khung có RMS < 5% RMS đỉnh của đoạn = im lặng
 MIN_SILENCE_S = 0.12
@@ -122,6 +123,10 @@ def _tts_chunks(root: Path, cfg: Config, client: SpeechClient, preset: Preset, b
     (root / CHUNKS_AUDIO).mkdir(parents=True, exist_ok=True)
     idx = _load_chunk_index(root)
     texts = [b.text.strip() for b in beats.beats]
+    n_chars = sum(len(t) for t in texts)
+    if mode == "full" and n_chars > FULL_MAX_CHARS:
+        raise VidflowError(f"Bài dài {n_chars} ký tự — 'Cả bài một lượt' chỉ dùng cho bài ≤ {FULL_MAX_CHARS} ký tự. "
+                           "Chọn cách đọc 'Theo đoạn' (chunk) trong Cài đặt.")
     groups = chunk_groups(texts, mode)
     out: list[tuple[list[int], str]] = []
     total, done = len(groups), 0
@@ -135,8 +140,10 @@ def _tts_chunks(root: Path, cfg: Config, client: SpeechClient, preset: Preset, b
             continue
         joined = "\n".join(part)
         try:
+            # treo (TimeoutError) gần như luôn do hết lượt miễn phí: thử lại chỉ thêm vài phút chờ vô ích
             data = with_retry(lambda: client.synthesize(text=joined, voice=preset.voice.name,
-                                                        style=preset.voice.style, model=cfg.tts_model), sleep=sleep)
+                                                        style=preset.voice.style, model=cfg.tts_model), sleep=sleep,
+                              retry_timeouts=False)
         except Exception as e:
             hint = " — Gemini không trả lời, thường do hết lượt TTS miễn phí; thử lại sau" if isinstance(e, TimeoutError) else ""
             first, last = beats.beats[g[0]].n, beats.beats[g[-1]].n

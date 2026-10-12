@@ -203,7 +203,7 @@ function qBoardHead() {
       clipTodo ? h("button", { class: "primary", disabled: busy, onclick: () => qJob("clips") }, `Gen ${clipTodo} clip (${provLabel(qProvider("clips"))})`) : null,
       h("button", { onclick: () => { Q.sel = null; Q.render(); } }, "Cài đặt")));
 }
-const QVOICE = { chunk: "Theo đoạn ~20 câu (đề xuất)", full: "Cả bài một lượt", per_beat: "Từng câu (chính xác nhất, tốn lượt)" };
+const QVOICE = { chunk: "Theo đoạn ~20 câu (đề xuất)", full: "Cả bài một lượt (chỉ bài ngắn ≤ 3.000 ký tự)", per_beat: "Từng câu (chính xác nhất, tốn lượt)" };
 const QVOICE_OPTS = Object.entries(QVOICE);
 function qNext() {
   const d = Q.data, st = d.status, q = d.quick, busy = S.job?.state === "running";

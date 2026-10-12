@@ -23,9 +23,12 @@ def gemini_client():
     return genai.Client(http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS))
 
 
+TTS_MAX_S = 300  # trần hạn chót: hết lượt thì Gemini treo, không để người dùng chờ quá 5 phút mỗi lần
+
+
 def tts_deadline(text: str) -> float:
-    """Hạn chót một lượt TTS: 90 giây, đoạn dài (đọc theo đoạn/cả bài) thêm thời gian theo số ký tự."""
-    return max(HTTP_TIMEOUT_MS / 1000, 0.15 * len(text))
+    """Hạn chót một lượt TTS: 90 giây, đoạn dài (đọc theo đoạn/cả bài) thêm thời gian theo số ký tự, tối đa 5 phút."""
+    return min(TTS_MAX_S, max(HTTP_TIMEOUT_MS / 1000, 0.15 * len(text)))
 
 
 class GeminiSpeechClient:

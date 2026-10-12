@@ -319,3 +319,30 @@ def test_tts_deadline_grows_with_text():
 
     assert tts_deadline("Một câu.") == 90
     assert tts_deadline("a" * 1500) == pytest.approx(225)
+
+
+def test_tts_deadline_is_capped():
+    from vidflow.gemini import TTS_MAX_S, tts_deadline
+
+    assert tts_deadline("a" * 20000) == TTS_MAX_S == 300
+
+
+def test_chunk_timeout_not_retried(root45):
+    calls = []
+
+    class Hang:
+        def synthesize(self, **kw):
+            calls.append(1)
+            raise TimeoutError("Không phản hồi sau 225 giây")
+
+    with pytest.raises(VidflowError, match="hết lượt"):
+        run(root45, Hang(), mode="chunk")
+    assert len(calls) == 1  # treo vì hết lượt → không thử lại 3 lần
+
+
+def test_full_mode_refuses_long_script(tmp_path):
+    root = tmp_path / "long"
+    create_quick(root, preset=PRESET, title="T")
+    save_beats(root, Beats(beats=[Beat(n=i, text="x" * 200) for i in range(1, 21)]))  # 4000 ký tự
+    with pytest.raises(VidflowError, match="Theo đoạn"):
+        run(root, None, mode="full")

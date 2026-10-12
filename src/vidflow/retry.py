@@ -21,12 +21,12 @@ def is_transient(exc: BaseException) -> bool:
 
 
 def with_retry(fn: Callable[[], T], *, attempts: int = 3, base_delay: float = 2.0,
-               sleep: Callable[[float], None] = time.sleep) -> T:
+               sleep: Callable[[float], None] = time.sleep, retry_timeouts: bool = True) -> T:
     for i in range(attempts):
         try:
             return fn()
         except Exception as exc:
-            if i == attempts - 1 or not is_transient(exc):
+            if i == attempts - 1 or not is_transient(exc) or (not retry_timeouts and isinstance(exc, TimeoutError)):
                 raise
             sleep(base_delay * 2 ** i)
     raise AssertionError("unreachable")
