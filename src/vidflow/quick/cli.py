@@ -70,7 +70,7 @@ def _claude(kind: str, project: Path, print_only: bool):
     q = load_quick(project)
     if kind == "script" and not q.picked_idea():
         raise VidflowError("Chưa chọn ý tưởng — `vidflow quick pick -p ... <n>`.")
-    if kind in ("prompts", "flow"):
+    if kind in ("prompts", "flow", "clips"):
         require_beats(project)
     preset = load_preset(q.preset)
     if print_only:
@@ -105,6 +105,35 @@ def prompts(project: ProjectOpt, print_only: PrintOpt = False):
 def flow(project: ProjectOpt, print_only: PrintOpt = False):
     """Gen ảnh mốc pending/redo trong Google Flow (claude --chrome)."""
     _claude("flow", project, print_only)
+
+
+@_cmd(quick_app, "sheets")
+def sheets(project: ProjectOpt, print_only: PrintOpt = False):
+    """Gen character sheet còn thiếu trong Google Flow (claude --chrome)."""
+    _claude("sheets", project, print_only)
+
+
+@_cmd(quick_app, "clips")
+def clips_flow(project: ProjectOpt, print_only: PrintOpt = False):
+    """Gen clip động trong Google Flow (claude --chrome)."""
+    _claude("clips", project, print_only)
+
+
+@_cmd(quick_app, "review")
+def review(project: ProjectOpt, n: Annotated[int, typer.Argument()], clip: ClipOpt = False,
+           print_only: PrintOpt = False):
+    """Kiểm duyệt độc lập prompt ảnh/clip của một mốc."""
+    import subprocess
+
+    from vidflow.quick.preset import REPO
+
+    preset = load_preset(load_quick(project).preset)
+    if print_only:
+        typer.echo(jobs.review_task(project, preset, n, clip=clip))
+        return
+    rc = subprocess.run(jobs.review_cmd(project, preset, n, clip=clip), cwd=REPO, stdin=subprocess.DEVNULL).returncode
+    if rc:
+        raise VidflowError(f"Kiểm duyệt mốc {n} lỗi (mã {rc}).")
 
 
 @_cmd(quick_app, "pick")

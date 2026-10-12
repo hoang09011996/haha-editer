@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from vidflow.quick.jobs import QUICK_KINDS, claude_cmd, claude_task
+from vidflow.quick.jobs import CHROME_KINDS, QUICK_KINDS, claude_cmd, claude_task, review_cmd, review_task
 from vidflow.quick.preset import load_preset
 
 ROOT = Path("projects/demo")
@@ -50,12 +50,48 @@ def test_flow_task(preset):
     assert "16:9" in t
 
 
-def test_chrome_only_for_flow(preset):
+def test_chrome_only_for_flow_kinds(preset):
+    assert CHROME_KINDS == ("sheets", "flow", "clips")
     for kind in QUICK_KINDS:
         cmd = claude_cmd(kind, ROOT, preset)
         assert cmd[:4] == ["claude", "-p", "--permission-mode", "bypassPermissions"]
-        assert ("--chrome" in cmd) == (kind == "flow")
+        assert ("--chrome" in cmd) == (kind in CHROME_KINDS)
         assert cmd[-1] == claude_task(kind, ROOT, preset)
+
+
+def test_script_task_proposes_characters(preset):
+    t = claude_task("script", ROOT, preset)
+    assert "quick set-chars" in t and "quick chars" in t
+
+
+def test_prompts_task_mentions_refs_cont_and_clips(preset):
+    t = claude_task("prompts", ROOT, preset)
+    assert "@TÊN" in t and "cont" in t
+    assert "quick set-clip-prompts" in t and "max_clips" in t
+
+
+def test_flow_task_uses_attach(preset):
+    t = claude_task("flow", ROOT, preset)
+    assert "attach" in t and "blocked" in t and "quick fail" in t
+
+
+def test_sheets_task(preset):
+    t = claude_task("sheets", ROOT, preset)
+    assert "quick chars" in t and "quick char-image" in t and "--channel" in t
+    assert "flow-operator.md" in t
+
+
+def test_clips_task(preset):
+    t = claude_task("clips", ROOT, preset)
+    assert "--todo-clips" in t and "quick set-clip" in t and "quick fail" in t and "--clip" in t
+
+
+def test_review_task_and_cmd(preset):
+    t = review_task(ROOT, preset, 7)
+    assert "mốc 7" in t and "quick set-review" in t and "--clip" not in t
+    assert "--clip" in review_task(ROOT, preset, 7, clip=True)
+    cmd = review_cmd(ROOT, preset, 7)
+    assert "--chrome" not in cmd and cmd[-1] == t
 
 
 def test_unknown_kind(preset):

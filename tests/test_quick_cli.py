@@ -174,11 +174,11 @@ def test_llm_commands_call_run_claude(qp, tmp_path, monkeypatch):
     ok(["quick", "pick", "-p", qp, 1])
     ok(["quick", "script", "-p", qp])
     ok(["quick", "set-beats", "-p", qp, "--json", _texts(tmp_path, ["A."])])
-    for kind in ("prompts", "flow"):
+    for kind in ("prompts", "sheets", "flow", "clips"):
         ok(["quick", kind, "-p", qp])
     monkeypatch.setattr(jobs, "run_claude", lambda *a, **kw: 2)
     assert "mã 2" in fail(["quick", "flow", "-p", qp]).output
-    assert [c[0] for c in calls] == ["ideas", "script", "prompts", "flow"]
+    assert [c[0] for c in calls] == ["ideas", "script", "prompts", "sheets", "flow", "clips"]
     assert all(c[2] == PRESET for c in calls)
 
 
