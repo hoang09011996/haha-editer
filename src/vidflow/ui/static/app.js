@@ -276,15 +276,23 @@ function stepNav(step) {
 
 // ================= trang chủ =================
 function renderHome() {
+  const quick = S.projects.filter(p => p.kind === "quick"), full = S.projects.filter(p => p.kind !== "quick");
   return h("div", { class: "hero" },
-    h("h2", { class: "hero-title" }, "Làm video AI trong 7 bước"),
-    h("p", { class: "hero-sub" }, "Bạn đưa ý tưởng — AI viết kịch bản chi tiết, prompt chống “chất AI”, giọng đọc; Google Flow gen clip bằng tín dụng gói; vidflow dựng sẵn draft CapCut."),
-    h("div", { class: "flow7" }, STEPS.map((s, i) => h("div", { class: "f7" }, h("div", { class: "f7i" }, String(i + 1)), h("div", { class: "f7n" }, s.title)))),
-    h("h3", { class: "sec" }, "Bắt đầu nhanh từ mẫu"),
+    h("h2", { class: "hero-title" }, "Làm video với vidflow"),
+    h("p", { class: "hero-sub" }, "Hai quy trình: video nhanh (doodle nhiều mốc, ảnh + clip động trong Google Flow, xuất MP4) hoặc video chi tiết (từng cảnh Veo, dựng draft CapCut)."),
+    h("div", { class: "entry" },
+      h("div", { class: "card" }, h("h3", {}, "Video nhanh"), h("p", { class: "hint" }, "Chọn bộ kênh, AI đề xuất ý tưởng, viết kịch bản, tách mốc, viết prompt. Bạn duyệt từng bước."),
+        h("button", { class: "primary", onclick: () => Q.openNew() }, "Tạo video nhanh")),
+      h("div", { class: "card" }, h("h3", {}, "Video chi tiết"), h("p", { class: "hint" }, "Ý tưởng → kịch bản từng cảnh → prompt Veo → giọng đọc → clip Flow → draft CapCut."),
+        h("button", { onclick: () => openNew() }, "Tạo video chi tiết"))),
+    quick.length ? h("div", {}, h("h3", { class: "sec" }, "Video nhanh của bạn"),
+      h("div", { class: "tpls" }, quick.map(p => h("button", { class: "tpl", onclick: () => openProject(p.name) }, h("b", {}, p.title),
+        h("p", {}, p.error ? p.error : `${p.beats ?? 0} mốc · ${QSTAGE[p.stage] || p.stage}`))))) : null,
+    h("h3", { class: "sec" }, "Video chi tiết — bắt đầu từ mẫu"),
     h("div", { class: "tpls" }, TEMPLATES.map(t => h("button", { class: "tpl", onclick: () => openNew(t) }, h("b", {}, t.title), h("p", {}, t.idea)))),
-    h("div", { class: "row center", style: "margin-top:18px" }, h("button", { class: "primary big", onclick: () => openNew() }, "+ Tự nhập ý tưởng")),
-    S.projects.length ? h("div", {}, h("h3", { class: "sec" }, "Project của bạn"),
-      h("div", { class: "tpls" }, S.projects.map(p => h("button", { class: "tpl", onclick: () => openProject(p.name, true) }, h("b", {}, p.title), h("p", {}, p.kind === "quick" ? `Video nhanh · ${p.beats ?? 0} mốc` : `${p.scenes ?? 0} cảnh · ${p.approved ?? 0} đã duyệt · ${p.aspect ?? ""}`))))) : null);
+    full.length ? h("div", {}, h("h3", { class: "sec" }, "Video chi tiết của bạn"),
+      h("div", { class: "tpls" }, full.map(p => h("button", { class: "tpl", onclick: () => openProject(p.name, true) }, h("b", {}, p.title),
+        h("p", {}, `${p.scenes ?? 0} cảnh · ${p.approved ?? 0} đã duyệt · ${p.aspect ?? ""}`))))) : null);
 }
 
 // ================= các bước =================
@@ -654,7 +662,7 @@ function openNew(tpl = null) {
 
 // ================= khởi động =================
 document.getElementById("projectSel").addEventListener("change", e => openProject(e.target.value, true));
-document.getElementById("newBtn").addEventListener("click", () => openNew());
+document.getElementById("newBtn").addEventListener("click", () => openProject(""));
 document.getElementById("homeBtn").addEventListener("click", () => openProject(""));
 document.getElementById("saveBtn").addEventListener("click", save);
 document.getElementById("reloadBtn").addEventListener("click", () => { S.dirty = false; openProject(S.name); });

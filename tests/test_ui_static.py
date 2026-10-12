@@ -111,3 +111,10 @@ def test_quick_chars_screen_registered():
         body = body[: body.index("\n}\n")]
         assert "const name = Q.name" in body and "toast(e.message" not in body and "qRefresh(name)" in body, fn
     assert 'qColor(c.color, "var(--muted)")' in js  # màu nhân vật vào style chỉ khi #RRGGBB
+
+
+def test_quick_new_dialog_and_home():
+    js, app = _read("quick.js"), _read("app.js")
+    assert "Q.openNew = async function" in js and "Tạo và đề xuất ý tưởng" in js and "Model clip động · bắt buộc" in js
+    assert "Nguồn gen ảnh" in js and "Nguồn gen clip" in js and "image_provider: f.image_provider" in js
+    assert "Q.openNew()" in app and "Video nhanh" in app

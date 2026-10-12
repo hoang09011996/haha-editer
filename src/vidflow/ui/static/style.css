@@ -278,3 +278,22 @@ details.joblog{margin-top:22px}
 .char-h{display:flex;align-items:center;gap:8px}
 .cid{font-weight:600}
 .char-desc{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+
+/* ===== Quy trình nhanh — Tạo video nhanh, trang chủ ===== */
+.entry{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+dialog.qdlg{padding:0;width:min(760px,94vw)}
+.qdlg-h{padding:24px 28px 16px;border-bottom:1px solid var(--line)}
+.qdlg-h h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.5px}
+.qdlg-h p{margin:6px 0 0}
+.qdlg-b{padding:20px 28px;display:flex;flex-direction:column;gap:22px}
+.qsec{display:flex;gap:16px}
+.qsec>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.qsec h2{margin:0;font-size:15px;font-weight:700}
+.stepnum{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--primary);color:#fff;font-size:12px;font-weight:700}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pick-list{display:flex;flex-direction:column;gap:8px}
+.pick-char{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--clip-line);background:var(--clip-bg)}
+.f.req .flabel{color:var(--primary)}
+.f.req select{border:2px solid var(--primary)}
+.qdlg-f{padding:16px 28px;border-top:1px solid var(--line);background:var(--input);display:flex;justify-content:flex-end;gap:10px}
+@media (max-width:600px){.grid2{grid-template-columns:1fr}.qsec{gap:10px}}

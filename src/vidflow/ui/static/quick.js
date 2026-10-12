@@ -449,3 +449,74 @@ async function qPromote(id) {
   await qRefresh(name);
 }
 QSCREENS.chars = qChars;
+
+// ================= Tạo video nhanh =================
+Q.openNew = async function () {
+  let presets;
+  try { presets = await api("/api/presets"); } catch (e) { toast(e.message, true); return; }
+  if (!presets.length) { toast("Chưa có bộ kênh — tạo bằng lệnh `vidflow preset import`.", true); return; }
+  const f = { preset: presets[0].id, chars: [], image_model: IMAGE_MODELS[0], video_model: "", resolution: "720p", image_provider: "flow", video_provider: "flow", max_clips: 12, allow_cont: true };
+  const presetSel = h("select", {}, presets.map(p => h("option", { value: p.id }, p.name)));
+  const topic = h("input", { type: "text", placeholder: "vd: một ngày bình thường của tổ tiên 50.000 năm trước" });
+  const charsBox = h("div", { class: "pick-list" }), aspect = h("span", { class: "mono" });
+  const fillPreset = () => {
+    const p = presets.find(x => x.id === presetSel.value);
+    f.preset = p.id; f.chars = p.characters.map(c => c.id); aspect.textContent = p.aspect;
+    charsBox.replaceChildren(...(p.characters.length ? p.characters.map(c => {
+      const cb = h("input", { type: "checkbox" }); cb.checked = true;
+      cb.onchange = () => { f.chars = cb.checked ? [...f.chars, c.id] : f.chars.filter(x => x !== c.id); };
+      return h("label", { class: "pick-char" }, cb, h("span", { class: "swatch", style: `background:${qColor(c.color, "var(--muted)")}` }),
+        h("span", {}, h("span", { class: "mono cid" }, "@" + c.id), " ", h("span", { class: "hint" }, c.name || c.desc)));
+    }) : [h("span", { class: "hint" }, "Bộ kênh chưa có nhân vật.")]));
+  };
+  presetSel.onchange = fillPreset; fillPreset();
+  const pick = (key, opts) => { const s = h("select", {}, opts.map(o => h("option", { value: o }, o || "— chọn —"))); s.value = f[key]; s.onchange = () => { f[key] = s.value; }; return s; };
+  const psel = key => { const s = h("select", {}, PROVIDERS.map(([v, l]) => h("option", { value: v }, l))); s.value = f[key]; s.onchange = () => { f[key] = s.value; }; return s; };
+  const maxOut = h("span", { class: "mono" }, String(f.max_clips));
+  const range = h("input", { type: "range", min: 0, max: 40, value: f.max_clips, "aria-label": "Số clip động tối đa" });
+  const vidLabel = h("label", { class: "f req" }, h("span", { class: "flabel" }, "Model clip động · bắt buộc"), pick("video_model", VIDEO_MODELS));
+  range.oninput = () => { f.max_clips = Number(range.value); maxOut.textContent = range.value; vidLabel.classList.toggle("req", f.max_clips > 0); };
+  const cont = h("input", { type: "checkbox" }); cont.checked = true; cont.onchange = () => { f.allow_cont = cont.checked; };
+  const sec = (n, title, ...kids) => h("section", { class: "qsec" }, h("span", { class: "stepnum" }, String(n)), h("div", {}, h("h2", {}, title), kids));
+  const dlg = h("dialog", { class: "qdlg", "aria-label": "Video nhanh mới" });
+  dlg.addEventListener("close", () => dlg.remove());
+  const okBtn = h("button", { type: "button", class: "primary" }, "Tạo và đề xuất ý tưởng");
+  const submit = async () => {
+    if (okBtn.disabled) return;
+    if (f.max_clips > 0 && !f.video_model) { toast("Chọn model clip động (bắt buộc khi số clip tối đa > 0).", true); return; }
+    const p = presets.find(x => x.id === f.preset);
+    const body = { preset: f.preset, topic: topic.value.trim(), channel_chars: f.chars.length === p.characters.length ? null : f.chars,
+      image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider, video_provider: f.video_provider,
+      max_clips: f.max_clips, allow_cont: f.allow_cont, start: true };
+    okBtn.disabled = true; // tên thư mục tự sinh theo giây: bấm hai lần sẽ trùng (409)
+    try {
+      const r = await api("/api/quick", { method: "POST", body: JSON.stringify(body) });
+      dlg.close();
+      await loadProjects(); await openProject(r.name);
+      if (r.job) { S.job = r.job; startPolling(); toast(`Bắt đầu: ${r.job.label}`); } else if (r.warning) toast(r.warning, true);
+    } catch (e) { okBtn.disabled = false; toast(e.message, true); }
+  };
+  okBtn.onclick = submit;
+  dlg.append(
+    h("div", { class: "qdlg-h" }, h("h1", {}, "Video nhanh mới"), h("p", { class: "hint" }, "AI đề xuất 5 ý tưởng, viết kịch bản, tách mốc và viết prompt. Bạn duyệt ở từng bước.")),
+    h("div", { class: "qdlg-b" },
+      sec(1, "Bộ kênh và chủ đề", h("label", { class: "f" }, h("span", { class: "flabel" }, "Bộ kênh"), presetSel),
+        h("label", { class: "f" }, h("span", { class: "flabel" }, "Chủ đề gợi ý · không bắt buộc"), topic)),
+      sec(2, "Nhân vật của kênh dùng trong video", charsBox, h("span", { class: "hint" }, "Nhân vật riêng của video do AI đề xuất sau bước kịch bản.")),
+      sec(3, "Google Flow", h("div", { class: "grid2" },
+        h("div", { class: "f" }, h("span", { class: "flabel" }, "Tỉ lệ (theo bộ kênh)"), aspect),
+        h("label", { class: "f" }, h("span", { class: "flabel" }, "Model ảnh"), pick("image_model", IMAGE_MODELS)),
+        vidLabel,
+        h("label", { class: "f" }, h("span", { class: "flabel" }, "Độ phân giải clip"), pick("resolution", ["720p", "1080p"])),
+        h("label", { class: "f" }, h("span", { class: "flabel" }, "Nguồn gen ảnh"), psel("image_provider")),
+        h("label", { class: "f" }, h("span", { class: "flabel" }, "Nguồn gen clip"), psel("video_provider"))),
+        h("span", { class: "hint" }, "Flow, Gemini (gemini.google.com) hoặc AI Studio (aistudio.google.com) qua Chrome đã đăng nhập. Hết lượt ở nguồn nào thì đổi nguồn trên Bảng mốc.")),
+      sec(4, "Chuyển động",
+        h("label", { class: "f" }, h("span", { class: "flabel row between" }, "Số clip động tối đa", maxOut), range,
+          h("span", { class: "hint" }, "AI đề xuất tối đa ngần này mốc làm clip; bạn bật/tắt từng mốc trên Bảng mốc. 0 = chỉ ảnh tĩnh.")),
+        h("label", { class: "checks" }, cont, h("span", {}, "Cho phép AI đánh dấu ", h("strong", {}, "nối cảnh"), " — mốc tiếp nối cùng khoảnh khắc được đính ảnh mốc trước làm tham chiếu.")))),
+    h("div", { class: "qdlg-f" }, h("button", { type: "button", onclick: () => dlg.close() }, "Hủy"),
+      okBtn));
+  document.body.append(dlg);
+  dlg.showModal();
+};
