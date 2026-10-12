@@ -376,14 +376,18 @@ def quick_router(projects_root: Path, runner: JobRunner, reviews: ReviewRunner) 
             cmd = review_cmd(root, load_preset(q.preset), req.n, clip=req.clip)
         except VidflowError as e:
             raise HTTPException(422, str(e))
+        before = beat.clip.review if req.clip else beat.review  # kết quả cũ: claude thoát 0 mà không ghi → 502
         rc, out = reviews.run(cmd)
         if rc == 124:
             raise HTTPException(504, out)
         if rc != 0:
             raise HTTPException(502, f"Kiểm duyệt lỗi (mã {rc}): {out[-400:]}")
-        beat = require_beats(root).get(req.n)
+        try:
+            beat = require_beats(root).get(req.n)
+        except VidflowError as e:
+            raise HTTPException(502, f"Không đọc được kết quả kiểm duyệt: {e}")
         rv = beat.clip.review if req.clip else beat.review
-        if rv is None:
+        if rv is None or rv == before:
             raise HTTPException(502, "Kiểm duyệt không ghi kết quả — thử lại.")
         lines = [ln for ln in out.splitlines() if ln.strip()]
         return {"n": req.n, "clip": req.clip, "review": rv.model_dump(), "summary": lines[-1] if lines else ""}

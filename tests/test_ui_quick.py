@@ -389,7 +389,7 @@ WRITE_ROUTES = [("/api/quick", {"preset": "doodle-giai-ma"}), ("/api/quick/vid/s
                 ("/api/quick/vid/retry", {}), ("/api/quick/vid/clip", {"ns": [1], "on": True}),
                 ("/api/quick/vid/prompt", {"n": 1, "prompt": "x"}), ("/api/quick/vid/override", {"n": 1}),
                 ("/api/quick/vid/chars/FARMER/promote", None), ("/api/quick/vid/jobs", {"kind": "voice"}),
-                ("/api/quick/vid/jobs/stop", None)]
+                ("/api/quick/vid/jobs/stop", None), ("/api/quick/vid/review", {"n": 1})]
 
 
 def test_write_routes_require_login(tmp_path, qroot):
@@ -448,3 +448,46 @@ def test_review_runner_real_subprocess():
     r.timeout = 0.3
     rc, out = r.run([sys.executable, "-c", "import time; time.sleep(3)"])
     assert rc == 124 and "quá" in out
+
+
+def test_review_old_result_unchanged_is_502(env, P):
+    ops.set_prompts(env.root, [{"n": 1, "prompt": P("a cave"), "verdict": "pass", "score": 8}])
+    r = env.c.post("/api/quick/vid/review", json={"n": 1})  # claude thoát 0 nhưng không ghi gì
+    assert r.status_code == 502 and "không ghi kết quả" in r.json()["detail"]
+    clips_mod = __import__("vidflow.quick.clips", fromlist=["x"])
+    clips_mod.set_clip_prompts(env.root, [{"n": 1, "prompt": "doodle motion", "verdict": "fail", "score": 3}])
+    r = env.c.post("/api/quick/vid/review", json={"n": 1, "clip": True})
+    assert r.status_code == 502 and "không ghi kết quả" in r.json()["detail"]
+
+
+def test_review_beats_unreadable_after_run_is_502(env, P):
+    ops.edit_prompt(env.root, 1, P("a cave"))
+    env.reviews.action = lambda: (env.root / "beats.json").write_text("{hỏng", encoding="utf-8")
+    r = env.c.post("/api/quick/vid/review", json={"n": 1})
+    assert r.status_code == 502 and "Không đọc được" in r.json()["detail"]
+
+
+def test_review_runner_timeout_kills_grandchild(tmp_path):
+    import os
+    pidf = tmp_path / "gc.pid"
+    child = "import time; time.sleep(30)"
+    parent = (f"import subprocess, sys, time; p = subprocess.Popen([sys.executable, '-c', {child!r}]); "
+              f"open({str(pidf)!r}, 'w').write(str(p.pid)); time.sleep(30)")
+    r = ReviewRunner()
+    r.timeout = 1
+    rc, _ = r.run([sys.executable, "-c", parent])
+    assert rc == 124 and pidf.is_file()
+    gc = int(pidf.read_text())
+    for _ in range(50):
+        try:
+            os.kill(gc, 0)
+        except ProcessLookupError:
+            break
+        try:  # tiến trình cháu mồ côi thành zombie một lúc trước khi init dọn
+            if os.waitpid(gc, os.WNOHANG) != (0, 0):
+                break
+        except ChildProcessError:
+            pass
+        time.sleep(0.1)
+    else:
+        raise AssertionError("tiến trình cháu vẫn sống sau khi quá giờ")

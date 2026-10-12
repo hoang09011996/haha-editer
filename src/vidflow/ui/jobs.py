@@ -221,9 +221,14 @@ class ReviewRunner:
 
     def run(self, cmd: list[str]) -> tuple[int, str]:
         with self._lock:
+            # nhóm tiến trình riêng: quá giờ thì diệt cả tiến trình con (Bash của claude chạy `set-review`...),
+            # tránh chúng ghi beats.json sau khi đã trả 504 hoặc chồng lên lần kiểm duyệt sau
+            proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    stdin=subprocess.DEVNULL, start_new_session=True)
             try:
-                r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, timeout=self.timeout,
-                                   stdin=subprocess.DEVNULL)
+                out, err = proc.communicate(timeout=self.timeout)
             except subprocess.TimeoutExpired:
+                _signal_group(proc, signal.SIGKILL)
+                proc.communicate()
                 return 124, f"Kiểm duyệt quá {self.timeout} giây"
-            return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
+            return proc.returncode, ((out or "") + (err or "")).strip()
