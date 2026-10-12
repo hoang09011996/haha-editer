@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from typing import IO
 
+from vidflow.errors import VidflowError
+from vidflow.quick.model import LimitHit, load_quick
 from vidflow.quick.preset import REPO, Preset, brief_path
 
 AGENTS = REPO / ".claude" / "agents"
@@ -44,6 +46,40 @@ def provider_for(kind: str, q) -> str:
     return q.flow.video_provider if kind == "clips" else q.flow.image_provider
 
 
+def media_kind(kind: str) -> str:
+    """Loại media của job gen: clips → video, sheets/flow → image."""
+    return "video" if kind == "clips" else "image"
+
+
+def resolve_provider(kind: str, project_root: Path, provider: str | None = None) -> str:
+    """Nguồn cho job: `provider` nếu có, không thì theo cài đặt project (không đọc được → flow)."""
+    if provider is not None or kind not in GEN_KINDS:
+        return provider or "flow"
+    try:
+        return provider_for(kind, load_quick(project_root))
+    except (VidflowError, OSError):
+        return "flow"
+
+
+def begin_gen(root: Path, kind: str, provider: str | None = None) -> str:
+    """Bắt đầu job gen: chọn nguồn (kiểm tra `provider` nếu truyền, không thì theo cài đặt) và xóa các mốc hết lượt
+    cũ của đúng nguồn + loại media đó. Trả về nguồn."""
+    from vidflow.quick import ops
+
+    if kind not in GEN_KINDS:
+        raise VidflowError(f"'{kind}' không phải job gen ({', '.join(GEN_KINDS)}).")
+    prov = ops.check_provider(provider) if provider else provider_for(kind, load_quick(root))
+    ops.clear_limits(root, prov, kind=media_kind(kind))
+    return prov
+
+
+def limit_hit(root: Path, provider: str, kind: str) -> LimitHit | None:
+    """Mốc hết lượt mới nhất của nguồn `provider` cho loại media của job `kind` (None nếu không có)."""
+    want = media_kind(kind)
+    hits = [x for x in load_quick(root).limits if x.provider == provider and x.kind == want]
+    return hits[-1] if hits else None
+
+
 def _operator(provider: str, section: str, writer: Path) -> str:
     """Câu mở đầu cho agent thao tác trình duyệt theo nguồn."""
     if provider not in PROVIDER_LABELS:
@@ -61,8 +97,9 @@ def _limit_rule(cli: str, root: Path, provider: str, kind: str) -> str:
             f"--kind {kind} --reason \"<nguyên văn>\"` rồi DỪNG và báo cáo.")
 
 
-def claude_task(kind: str, project_root: Path, preset: Preset, provider: str = "flow") -> str:
+def claude_task(kind: str, project_root: Path, preset: Preset, provider: str | None = None) -> str:
     root = project_root
+    provider = resolve_provider(kind, project_root, provider)
     cli = CLI
     writer = AGENTS / "quick-writer.md"
     common = _common(root, preset)
@@ -129,14 +166,14 @@ def claude_task(kind: str, project_root: Path, preset: Preset, provider: str = "
     raise ValueError(f"Không hỗ trợ việc '{kind}'")
 
 
-def claude_cmd(kind: str, project_root: Path, preset: Preset, provider: str = "flow") -> list[str]:
+def claude_cmd(kind: str, project_root: Path, preset: Preset, provider: str | None = None) -> list[str]:
     cmd = ["claude", "-p", "--permission-mode", "bypassPermissions"]
     if kind in CHROME_KINDS:
         cmd.append("--chrome")
     return cmd + [claude_task(kind, project_root, preset, provider)]
 
 
-def run_claude(kind: str, project_root: Path, preset: Preset, *, provider: str = "flow", log: IO | None = None) -> int:
+def run_claude(kind: str, project_root: Path, preset: Preset, *, provider: str | None = None, log: IO | None = None) -> int:
     """Chạy job Claude đồng bộ (CLI). UI nên dùng `claude_cmd` với JobRunner riêng."""
     r = subprocess.run(claude_cmd(kind, project_root, preset, provider), cwd=REPO, stdin=subprocess.DEVNULL,
                        stdout=log, stderr=subprocess.STDOUT if log else None)

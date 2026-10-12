@@ -206,11 +206,15 @@ def record_limit(root: Path, provider: str, kind: str, reason: str = "") -> Quic
     return q
 
 
-def clear_limits(root: Path, provider: str) -> int:
-    """Xóa các mốc hết lượt của một nguồn (khi bắt đầu job mới với nguồn đó). Trả số mục đã xóa."""
+def clear_limits(root: Path, provider: str, kind: str | None = None) -> int:
+    """Xóa các mốc hết lượt của một nguồn (khi bắt đầu job mới với nguồn đó); `kind` (image|video) chỉ xóa loại đó.
+    Trả số mục đã xóa."""
+    check_provider(provider)
+    if kind is not None and kind not in ("image", "video"):
+        raise VidflowError("kind phải là image hoặc video.")
     q = load_quick(root)
     before = len(q.limits)
-    q.limits = [x for x in q.limits if x.provider != provider]
+    q.limits = [x for x in q.limits if not (x.provider == provider and (kind is None or x.kind == kind))]
     if len(q.limits) != before:
         save_quick(root, q)
     return before - len(q.limits)

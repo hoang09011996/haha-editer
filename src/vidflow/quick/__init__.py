@@ -9,6 +9,10 @@ Hàm cho UI:
 - clip: `clips.set_clip_enabled / set_clip_prompts / set_clip / clip_todo / ready_clips`
 - xuất MP4: `render.RenderOptions`, `render.build_render_props(root, opts)` (props thuần),
   `render.write_render_props`, `render.render_quick(root, opts)` → out/<tên>-vN.mp4
-- việc nền: `jobs.claude_cmd(kind, root, preset)` (kind ∈ jobs.QUICK_KINDS; jobs.CHROME_KINDS cần Chrome),
-  `jobs.review_cmd(root, preset, n, clip=)`, `voice.run_voice`, `build.build_quick` (draft CapCut, nhận clip)
+- việc nền: `jobs.claude_cmd(kind, root, preset, provider=None)` (kind ∈ jobs.QUICK_KINDS; jobs.CHROME_KINDS cần
+  Chrome; provider None → theo cài đặt), `jobs.review_cmd(root, preset, n, clip=)`, `voice.run_voice`,
+  `build.build_quick` (draft CapCut, nhận clip)
+- nguồn gen: `jobs.PROVIDER_LABELS`, `jobs.provider_for(kind, q)`, `jobs.begin_gen(root, kind, provider=None)`
+  (chọn nguồn + xóa hết lượt cũ cùng nguồn/loại, gọi trước job gen), `jobs.limit_hit(root, provider, kind)`
+  (sau job: có → báo hết lượt, CLI thoát mã 3), `ops.check_provider / record_limit / clear_limits`
 """

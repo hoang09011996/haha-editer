@@ -93,7 +93,8 @@ def test_job_uses_settings_provider_and_override(qroot, P, monkeypatch):
 
 def test_job_exits_3_when_agent_records_limit(qroot, P, monkeypatch):
     _ready_for_flow(qroot, P)
-    ops.record_limit(qroot, "flow", "video")  # cũ, nguồn khác loại — vẫn bị xóa vì cùng nguồn flow
+    ops.record_limit(qroot, "flow", "image")  # cũ, cùng nguồn + loại — bị xóa khi bắt đầu job
+    ops.record_limit(qroot, "flow", "video")  # cùng nguồn, khác loại — giữ nguyên
     ops.record_limit(qroot, "gemini", "image")  # nguồn khác — giữ nguyên
 
     def fake_run(kind, root, preset, **kw):
@@ -105,7 +106,7 @@ def test_job_exits_3_when_agent_records_limit(qroot, P, monkeypatch):
     assert r.exit_code == 3
     assert "Hết lượt" in r.output and "ở flow" in r.output
     hits = [(x.provider, x.kind) for x in load_quick(qroot).limits]
-    assert hits == [("gemini", "image"), ("flow", "image")]
+    assert hits == [("flow", "video"), ("gemini", "image"), ("flow", "image")]
 
 
 def test_print_does_not_clear_limits_or_run(qroot, P, monkeypatch):
@@ -115,3 +116,46 @@ def test_print_does_not_clear_limits_or_run(qroot, P, monkeypatch):
     r = runner.invoke(app, ["quick", "flow", "-p", str(qroot), "--print", "--provider", "gemini"])
     assert r.exit_code == 0 and "Gemini" in r.output
     assert len(load_quick(qroot).limits) == 1
+
+
+def test_image_job_ignores_video_limit_of_same_provider(qroot, P, monkeypatch):
+    _ready_for_flow(qroot, P)
+
+    def fake_run(kind, root, preset, **kw):
+        ops.record_limit(root, kw["provider"], "video", reason="hết lượt clip")
+        return 0
+
+    monkeypatch.setattr(jobs_mod, "run_claude", fake_run)
+    r = runner.invoke(app, ["quick", "flow", "-p", str(qroot)])
+    assert r.exit_code == 0, r.output
+
+
+def test_clear_limits_kind_filter(qroot):
+    ops.record_limit(qroot, "flow", "image")
+    ops.record_limit(qroot, "flow", "video")
+    assert ops.clear_limits(qroot, "flow", kind="video") == 1
+    assert [(x.provider, x.kind) for x in load_quick(qroot).limits] == [("flow", "image")]
+    with pytest.raises(VidflowError):
+        ops.clear_limits(qroot, "gemeni")
+
+
+def test_begin_gen_clears_only_same_provider_and_kind(qroot):
+    ops.update_settings(qroot, video_provider="gemini")
+    for prov, kind in (("gemini", "video"), ("gemini", "image"), ("flow", "video")):
+        ops.record_limit(qroot, prov, kind)
+    assert jobs_mod.begin_gen(qroot, "clips") == "gemini"
+    assert [(x.provider, x.kind) for x in load_quick(qroot).limits] == [("gemini", "image"), ("flow", "video")]
+    assert jobs_mod.limit_hit(qroot, "gemini", "clips") is None
+    assert jobs_mod.limit_hit(qroot, "gemini", "flow").kind == "image"
+    assert jobs_mod.begin_gen(qroot, "sheets", "flow") == "flow"
+    with pytest.raises(VidflowError):
+        jobs_mod.begin_gen(qroot, "flow", "gemeni")
+
+
+def test_claude_cmd_provider_none_uses_settings(qroot, quick_presets):
+    from vidflow.quick.preset import load_preset
+    ops.update_settings(qroot, image_provider="aistudio")
+    pr = load_preset("doodle-giai-ma")
+    assert "AI Studio" in jobs_mod.claude_cmd("flow", qroot, pr)[-1]
+    assert "Google Flow" in jobs_mod.claude_cmd("clips", qroot, pr)[-1]
+    assert "Google Flow" in jobs_mod.claude_cmd("flow", qroot / "missing", pr)[-1]

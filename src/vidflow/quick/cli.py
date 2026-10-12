@@ -77,17 +77,16 @@ def _claude(kind: str, project: Path, print_only: bool, provider: str | None = N
     if kind == "clips" and not q.flow.video_model:
         raise VidflowError("Chưa chọn model clip — `vidflow quick settings -p <project> --video-model \"Veo 3.1 Lite\"`.")
     preset = load_preset(q.preset)
-    prov = ops.check_provider(provider) if provider else (jobs.provider_for(kind, q) if kind in jobs.GEN_KINDS else "flow")
+    gen = kind in jobs.GEN_KINDS
     if print_only:
+        prov = ops.check_provider(provider) if provider else jobs.resolve_provider(kind, project)
         typer.echo(jobs.claude_task(kind, project, preset, prov))
         return
-    if kind in jobs.GEN_KINDS:
-        ops.clear_limits(project, prov)
-    typer.echo(f"{jobs.LABELS[kind]} ({jobs.PROVIDER_LABELS[prov]})…" if kind in jobs.GEN_KINDS else f"{jobs.LABELS[kind]}…")
+    prov = jobs.begin_gen(project, kind, provider) if gen else "flow"
+    typer.echo(f"{jobs.LABELS[kind]} ({jobs.PROVIDER_LABELS[prov]})…" if gen else f"{jobs.LABELS[kind]}…")
     rc = jobs.run_claude(kind, project, preset, provider=prov)
-    hits = [x for x in load_quick(project).limits if x.provider == prov] if kind in jobs.GEN_KINDS else []
-    if hits:
-        h = hits[-1]
+    h = jobs.limit_hit(project, prov, kind) if gen else None
+    if h:
         typer.secho(f"Hết lượt {'ảnh' if h.kind == 'image' else 'clip'} ở {prov}"
                     + (f": {h.reason}" if h.reason else "")
                     + " — đổi nguồn bằng `vidflow quick settings -p <project> --image-provider/--video-provider ...` "
