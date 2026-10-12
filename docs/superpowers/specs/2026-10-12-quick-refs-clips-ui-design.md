@@ -85,6 +85,7 @@ Clip cần gen khi: `clip.enabled`, ảnh mốc `ok`, prompt clip đạt, `clip.
 | `clip on|off <n...>` | người dùng bật/tắt clip (giới hạn `max_clips`) |
 | `set-clip <n> <file>` | nhập clip đã gen → `clips/NNN_MM-SS.mp4`, `clip.status=ok` |
 | `fail <n> --reason ... [--clip]` | ghi lỗi Flow từ chối cho ảnh hoặc clip |
+| `set-review <n> --verdict pass\|fail\|override --score ... --issue ... [--clip]` | ghi kết quả kiểm duyệt một mốc (prompt-reviewer hoặc duyệt tay) |
 | `beats --todo` | thêm `attach: [đường dẫn tuyệt đối]` = ảnh nhân vật theo `refs` + ảnh mốc trước nếu `cont`; thêm `blocked: [{n, reason}]` |
 | `beats --todo-clips` | danh sách clip cần gen, kèm `image` (ảnh nguồn), `prompt`, model, độ phân giải |
 | `settings --video-model ... --resolution ... --max-clips ... --allow-cont/--no-allow-cont` | ghi cài đặt Flow |
@@ -136,7 +137,7 @@ vidflow quick render -p <project> [--resolution 1080p|720p] [--transition scene|
 
 ### Màn quy trình nhanh
 
-1. **Bảng mốc**: thanh tiến độ (có ảnh / đang gen / lỗi / chờ / bị chặn); nút Tạm dừng, Chạy lại mốc lỗi, Gen clip; bộ lọc (Tất cả, Lỗi, Chưa có ảnh, Bị chặn, Clip, Nối cảnh); mốc gom theo cảnh (cảnh = chuỗi mốc nối bằng `cont`; mốc không `cont` mở cảnh mới), màu cảnh lấy từ màu nhân vật chính hoặc bảng màu cố định; thẻ mốc: ảnh, số, thời gian, lời đọc, `@TÊN`, nhãn CLIP, trạng thái; khung phải: lời đọc, ảnh sẽ đính kèm, prompt ảnh + điểm, công tắc clip + prompt clip, Gen lại ảnh / AI viết lại / Lưu.
+1. **Bảng mốc**: thanh tiến độ (có ảnh / đang gen / lỗi / chờ / bị chặn); nút Tạm dừng, Chạy lại mốc lỗi, Gen clip; bộ lọc (Tất cả, Lỗi, Chưa có ảnh, Bị chặn, Clip, Nối cảnh); mốc gom theo cảnh (cảnh = chuỗi mốc nối bằng `cont`; mốc không `cont` mở cảnh mới), màu cảnh lấy từ màu nhân vật chính hoặc bảng màu cố định; thẻ mốc: ảnh, số, thời gian, lời đọc, `@TÊN`, nhãn CLIP, trạng thái; khung phải: lời đọc, ảnh sẽ đính kèm, prompt ảnh + điểm, công tắc clip + prompt clip, Gen lại ảnh / AI viết lại / Lưu. Prompt ảnh và prompt clip sửa trực tiếp trong khung: sửa xong bấm **Lưu & kiểm duyệt** → lưu prompt và chạy kiểm duyệt ngay cho mốc đó (nhãn "Đang kiểm duyệt…", thường vài giây đến vài chục giây), kết quả và gợi ý sửa hiện tại chỗ; trượt thì sửa tiếp hoặc bấm **Duyệt tay**. Kiểm duyệt chạy được cả khi Flow đang gen các mốc khác.
 2. **Nhân vật**: hai nhóm (bộ kênh, video này); thẻ có ảnh sheet, `@TÊN`, màu, mô tả, số mốc dùng; thiếu ảnh → nổi bật "chặn N mốc" + Gen sheet trong Flow / Tải ảnh lên; Đưa vào bộ kênh.
 3. **Xem thử & Xuất**: trình phát trên trình duyệt (ảnh/`<video>` theo mốc + `<audio>` giọng đọc + phụ đề), dòng thời gian tô màu theo cảnh, đánh dấu clip/lỗi/chưa có ảnh, sóng âm; bấm mốc để nhảy tới. Khung Xuất MP4 (các tùy chọn của `quick render`), Draft CapCut, danh sách bản đã xuất có link tải. Kéo mép mốc để đổi thời lượng: KHÔNG làm ở bản này (thời lượng do giọng đọc quyết định).
 4. **Tạo video nhanh**: bộ kênh, chủ đề gợi ý, nhân vật bộ kênh dùng, tỉ lệ, model ảnh, model clip (bắt buộc khi `max_clips > 0`), độ phân giải, số clip tối đa, cho phép nối cảnh.
@@ -144,7 +145,10 @@ vidflow quick render -p <project> [--resolution 1080p|720p] [--transition scene|
 ### API mới (`server.py`)
 
 - `GET /api/quick/{name}`: quick.yaml + beats + nhân vật + tóm tắt trạng thái (kể cả `blocked`).
-- `POST /api/quick` (tạo), `POST /api/quick/{name}/settings`, `/pick`, `/redo`, `/clip` (on/off), `/prompt` (sửa prompt ảnh/clip của một mốc — đánh dấu review trống để phải kiểm duyệt lại).
+- `POST /api/quick` (tạo), `POST /api/quick/{name}/settings`, `/pick`, `/redo`, `/clip` (on/off).
+- `POST /api/quick/{name}/prompt`: lưu prompt ảnh hoặc clip người dùng sửa tay cho một mốc; xóa review cũ (mốc chưa được gen cho tới khi đạt).
+- `POST /api/quick/{name}/review`: kiểm duyệt lại ngay một mốc (ảnh hoặc clip). Chạy `claude -p` vai prompt-reviewer chỉ cho mốc đó, ghi qua `vidflow quick set-review`; chạy ở hàng đợi riêng nên KHÔNG bị chặn bởi job Flow đang chạy (không dùng Chrome). Trả kết quả (đạt/trượt, điểm, lỗi, gợi ý sửa) để khung chi tiết hiện ngay.
+- `POST /api/quick/{name}/override`: người dùng duyệt tay (verdict `override`), như quy trình đầy đủ đã có.
 - `POST /api/quick/{name}/chars/{id}/image` (tải ảnh lên), `POST /api/quick/{name}/chars/{id}/promote`.
 - `POST /api/quick/{name}/jobs` với `kind ∈ {ideas, script, prompts, chars, flow, clips, voice, render, build}`; dùng `JobRunner` hiện có (mỗi lúc một job).
 - `GET /media/...` phục vụ cả `clips/`, `refs/`, `out/`, `presets/refs/`.
@@ -154,7 +158,7 @@ vidflow quick render -p <project> [--resolution 1080p|720p] [--transition scene|
 
 - pytest: mô hình (đọc beats.json cũ), tách `@TÊN` + từ chối tên lạ, luật bị chặn/chờ mốc trước, giới hạn `max_clips`, `attach` đúng thứ tự, `set-clip`/`fail`, `char-image` cả hai phạm vi, `promote`.
 - pytest: sinh `render-props.json` (ảnh/clip/khung trống, trim/speed, chuyển cảnh theo `cont`); `assemble` với clip.
-- pytest (TestClient): các API mới, có bắt đăng nhập.
+- pytest (TestClient): các API mới, có bắt đăng nhập; sửa prompt xóa review; `review` chạy được khi đang có job Flow (giả lập lệnh claude).
 - Thủ công: render Remotion một project nhỏ; chạy toàn quy trình với ~10 mốc, 2 nhân vật, 2 clip trong Flow.
 
 ## Thứ tự làm
