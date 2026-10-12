@@ -17,7 +17,7 @@ from vidflow.project import Project, create_project
 from vidflow.schema import FlowSettings, Script
 from vidflow.status import scene_rows
 from vidflow.ui.auth import Auth
-from vidflow.ui.jobs import KINDS, JobRunner
+from vidflow.ui.jobs import KINDS, JobRunner, ReviewRunner
 from vidflow.ui.quick_api import quick_router
 from vidflow.ui.suggest import Suggester
 
@@ -66,7 +66,8 @@ class PickRequest(BaseModel):
 
 
 def create_app(projects_root: Path, runner: JobRunner | None = None, config_path: Path | None = None,
-               suggester: Suggester | None = None, password: str | None = None) -> FastAPI:
+               suggester: Suggester | None = None, password: str | None = None,
+               review_runner: ReviewRunner | None = None) -> FastAPI:
     projects_root = Path(projects_root).resolve()
     projects_root.mkdir(parents=True, exist_ok=True)
     runner = runner or JobRunner()
@@ -95,7 +96,7 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
         return (STATIC / "index.html").read_text(encoding="utf-8")
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
-    app.include_router(quick_router(projects_root, runner))
+    app.include_router(quick_router(projects_root, runner, review_runner or ReviewRunner()))
 
     @app.get("/api/projects")
     def list_projects():

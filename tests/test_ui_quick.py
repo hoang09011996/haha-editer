@@ -10,7 +10,7 @@ from vidflow.quick import chars, ops
 from vidflow.errors import VidflowError
 from vidflow.quick.model import create_quick, load_beats, load_quick
 from vidflow.quick.preset import load_preset
-from vidflow.ui.jobs import JobRunner
+from vidflow.ui.jobs import JobRunner, ReviewRunner
 from vidflow.ui.quick_api import beat_state, media_url
 from vidflow.ui.server import create_app
 
@@ -39,11 +39,25 @@ def wait_idle(c):
     raise AssertionError("việc nền chưa xong")
 
 
+class FakeReview(ReviewRunner):
+    """Giả lập `claude -p` vai prompt-reviewer: chạy `action` (ghi kết quả qua ops) rồi trả (rc, out)."""
+
+    def __init__(self):
+        super().__init__()
+        self.cmds, self.action, self.rc, self.out = [], None, 0, "Mốc 1: trượt 4/10"
+
+    def run(self, cmd):
+        self.cmds.append(cmd)
+        if self.action:
+            self.action()
+        return self.rc, self.out
+
+
 @pytest.fixture
 def env(tmp_path, qroot, quick_presets):
-    runner = QuickFakeRunner()
-    c = TestClient(create_app(projects_root=tmp_path, runner=runner))
-    yield SimpleNamespace(c=c, root=qroot, tmp=tmp_path, presets=quick_presets, runner=runner)
+    runner, reviews = QuickFakeRunner(), FakeReview()
+    c = TestClient(create_app(projects_root=tmp_path, runner=runner, review_runner=reviews))
+    yield SimpleNamespace(c=c, root=qroot, tmp=tmp_path, presets=quick_presets, runner=runner, reviews=reviews)
     runner.stop()
 
 
@@ -167,6 +181,41 @@ def test_create_while_busy_keeps_project_and_warns(env):
     r = env.c.post("/api/quick", json={"preset": "doodle-giai-ma", "name": "busy1", "max_clips": 0})
     assert r.status_code == 201 and r.json()["job"] is None and "Đang chạy" in r.json()["warning"]
     assert load_quick(env.tmp / "busy1").preset == "doodle-giai-ma"
+    assert env.c.post("/api/quick/vid/jobs/stop").status_code == 200  # dọn việc nền còn chạy
+
+
+def test_create_existing_dir_is_conflict_and_untouched(env):
+    (env.tmp / "keep1").mkdir()
+    (env.tmp / "keep1" / "mine.txt").write_text("x")
+    r = env.c.post("/api/quick", json={"preset": "doodle-giai-ma", "name": "keep1", "max_clips": 0, "start": False})
+    assert r.status_code == 409
+    assert (env.tmp / "keep1" / "mine.txt").read_text() == "x"
+
+
+def test_create_concurrent_dir_is_conflict_and_untouched(env, monkeypatch):
+    """Thư mục xuất hiện giữa bước kiểm tra và bước tạo (request khác) → 409, không xóa thư mục của request kia."""
+    import vidflow.ui.quick_api as qa
+    real = qa.default_name
+
+    def racing(preset):
+        name = real(preset)
+        (env.tmp / name).mkdir()
+        (env.tmp / name / "other.txt").write_text("y")
+        return name
+    monkeypatch.setattr(qa, "default_name", racing)
+    r = env.c.post("/api/quick", json={"preset": "doodle-giai-ma", "max_clips": 0, "start": False})
+    assert r.status_code == 409
+    assert [d for d in env.tmp.iterdir() if (d / "other.txt").is_file()]
+
+
+def test_create_cleans_up_on_os_error(env, monkeypatch):
+    def boom(*a, **k):
+        raise OSError("đĩa đầy")
+    monkeypatch.setattr(ops, "update_settings", boom)
+    c = TestClient(env.c.app, raise_server_exceptions=False)
+    r = c.post("/api/quick", json={"preset": "doodle-giai-ma", "name": "os1", "max_clips": 0, "start": False})
+    assert r.status_code == 500 and "đĩa đầy" in r.json()["detail"]
+    assert not (env.tmp / "os1").exists()
 
 
 def test_create_validation_leaves_nothing_behind(env):
@@ -349,3 +398,53 @@ def test_write_routes_require_login(tmp_path, qroot):
     for path, body in WRITE_ROUTES:
         assert c.post(path, json=body).status_code == 401, path
     assert runner.calls == [] and not (tmp_path / "x").exists()
+
+
+def test_review_runs_while_flow_job_running(env, P):
+    c, root = env.c, env.root
+    ops.set_prompts(root, [{"n": 1, "prompt": P("@MODERNYOU at dawn"), "verdict": "pass", "score": 8}])
+    assert c.post("/api/quick/vid/prompt", json={"n": 1, "prompt": P("@MODERNYOU at dusk")}).status_code == 200
+    env.reviews.action = lambda: ops.set_review(root, 1, "fail", score=4, issues=["thiếu bối cảnh — thêm hang đá"])
+    env.runner.cmd = [sys.executable, "-c", "import time; time.sleep(5)"]
+    assert c.post("/api/quick/vid/jobs", json={"kind": "flow"}).status_code == 202
+    r = c.post("/api/quick/vid/review", json={"n": 1})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"n": 1, "clip": False, "summary": "Mốc 1: trượt 4/10",
+                        "review": {"verdict": "fail", "score": 4.0, "issues": ["thiếu bối cảnh — thêm hang đá"]}}
+    assert c.get("/api/jobs/current").json()["state"] == "running"  # job Flow vẫn chạy, kiểm duyệt không bị chặn
+    cmd = env.reviews.cmds[0]
+    assert cmd[0] == "claude" and "--chrome" not in cmd and "mốc 1" in cmd[-1] and "set-review" in cmd[-1]
+
+
+def test_review_clip_prompt(env, P):
+    from vidflow.quick import clips
+    clips.set_clip_prompts(env.root, [{"n": 2, "prompt": "frame-by-frame doodle motion", "verdict": "fail", "score": 2}])
+    env.reviews.action = lambda: ops.set_review(env.root, 2, "pass", score=8, clip=True)
+    r = env.c.post("/api/quick/vid/review", json={"n": 2, "clip": True})
+    assert r.status_code == 200 and r.json()["review"]["verdict"] == "pass"
+    assert "--clip" in env.reviews.cmds[0][-1]
+
+
+def test_review_errors(env, P):
+    c, root = env.c, env.root
+    assert c.post("/api/quick/vid/review", json={"n": 1}).status_code == 422  # chưa có prompt ảnh
+    assert c.post("/api/quick/vid/review", json={"n": 1, "clip": True}).status_code == 422
+    assert c.post("/api/quick/vid/review", json={"n": 99}).status_code == 422
+    ops.edit_prompt(root, 1, P("a cave"))
+    env.reviews.rc, env.reviews.out = 1, "claude: lỗi mạng"
+    r = c.post("/api/quick/vid/review", json={"n": 1})
+    assert r.status_code == 502 and "lỗi mạng" in r.json()["detail"]
+    env.reviews.rc = 0  # chạy xong nhưng không ghi kết quả
+    r = c.post("/api/quick/vid/review", json={"n": 1})
+    assert r.status_code == 502 and "không ghi kết quả" in r.json()["detail"]
+    env.reviews.rc, env.reviews.out = 124, "Kiểm duyệt quá 300 giây"
+    assert c.post("/api/quick/vid/review", json={"n": 1}).status_code == 504
+    assert env.reviews.cmds and len(env.reviews.cmds) == 3
+
+
+def test_review_runner_real_subprocess():
+    r = ReviewRunner()
+    assert r.run([sys.executable, "-c", "print('Mốc 3: đạt 9/10')"]) == (0, "Mốc 3: đạt 9/10")
+    r.timeout = 0.3
+    rc, out = r.run([sys.executable, "-c", "import time; time.sleep(3)"])
+    assert rc == 124 and "quá" in out

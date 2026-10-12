@@ -209,3 +209,21 @@ def _signal_group(proc: subprocess.Popen, sig: int) -> None:
         os.killpg(proc.pid, sig)
     except (ProcessLookupError, PermissionError):
         pass
+
+
+class ReviewRunner:
+    """Hàng đợi RIÊNG cho kiểm duyệt một mốc (`claude -p`, không Chrome): các lần kiểm duyệt chạy tuần tự với nhau
+    nhưng độc lập với JobRunner — không bị job Flow đang chạy chặn (nút "Lưu & kiểm duyệt")."""
+    timeout = 300
+
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    def run(self, cmd: list[str]) -> tuple[int, str]:
+        with self._lock:
+            try:
+                r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, timeout=self.timeout,
+                                   stdin=subprocess.DEVNULL)
+            except subprocess.TimeoutExpired:
+                return 124, f"Kiểm duyệt quá {self.timeout} giây"
+            return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()

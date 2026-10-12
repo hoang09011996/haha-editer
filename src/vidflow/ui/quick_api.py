@@ -15,9 +15,10 @@ from pydantic import BaseModel, Field
 from vidflow.errors import VidflowError
 from vidflow.quick import chars, clips, ops
 from vidflow.quick.chars import CharRef, char_rows, lookup
-from vidflow.quick.model import CHAR_ID, create_quick, is_quick, load_beats, load_quick
+from vidflow.quick.jobs import review_cmd
+from vidflow.quick.model import CHAR_ID, create_quick, is_quick, load_beats, load_quick, require_beats
 from vidflow.quick.preset import ID_RE, channel_refs_dir, list_presets, load_preset
-from vidflow.ui.jobs import JobRunner
+from vidflow.ui.jobs import JobRunner, ReviewRunner
 from vidflow.ui.quick_jobs import check_quick_job
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
@@ -183,7 +184,7 @@ def _do(fn, *args, **kwargs):
         raise HTTPException(422, str(e))
 
 
-def quick_router(projects_root: Path, runner: JobRunner) -> APIRouter:
+def quick_router(projects_root: Path, runner: JobRunner, reviews: ReviewRunner) -> APIRouter:
     router = APIRouter()
     projects_root = Path(projects_root)
 
@@ -272,12 +273,17 @@ def quick_router(projects_root: Path, runner: JobRunner) -> APIRouter:
         if not NAME_RE.match(name):
             raise HTTPException(422, "Tên thư mục chỉ gồm chữ thường không dấu, số, '-' hoặc '_'")
         root = projects_root / name
-        if root.exists():
-            raise HTTPException(409, f"'{name}' đã tồn tại")
         if req.max_clips > 0 and not req.video_model.strip():
             raise HTTPException(422, "Chọn model clip động (bắt buộc khi số clip tối đa > 0).")
         try:
             load_preset(req.preset)
+        except VidflowError as e:
+            raise HTTPException(422, str(e))
+        try:  # tạo thư mục nguyên tử: request khác tạo cùng tên trước → 409, không đụng tới thư mục của nó
+            root.mkdir(exist_ok=False)
+        except FileExistsError:
+            raise HTTPException(409, f"'{name}' đã tồn tại")
+        try:  # từ đây thư mục là của request này: lỗi gì cũng dọn rồi báo
             create_quick(root, preset=req.preset, title=req.topic.strip())
             ops.update_settings(root, image_model=req.image_model, video_model=req.video_model,
                                 resolution=req.resolution, image_provider=req.image_provider,
@@ -286,6 +292,9 @@ def quick_router(projects_root: Path, runner: JobRunner) -> APIRouter:
         except VidflowError as e:
             shutil.rmtree(root, ignore_errors=True)
             raise HTTPException(422, str(e))
+        except Exception as e:
+            shutil.rmtree(root, ignore_errors=True)
+            raise HTTPException(500, f"Không tạo được video: {e}") from e
         out = {"name": name, "job": None, "warning": None}
         if req.start:
             try:  # video đã tạo xong: không chạy được việc ý tưởng chỉ là cảnh báo, không phải lỗi
@@ -355,5 +364,28 @@ def quick_router(projects_root: Path, runner: JobRunner) -> APIRouter:
         if cur is None or cur.project != name or not runner.stop():
             raise HTTPException(409, "Không có việc đang chạy của video này")
         return {"stopped": True}
+
+    @router.post("/api/quick/{name}/review")
+    def review(name: str, req: BeatReq):
+        root = qroot(name)
+        try:
+            q = load_quick(root)
+            beat = require_beats(root).get(req.n)
+            if not (beat.clip.prompt if req.clip else beat.prompt):
+                raise VidflowError(f"Mốc {req.n} chưa có prompt {'clip' if req.clip else 'ảnh'} để kiểm duyệt.")
+            cmd = review_cmd(root, load_preset(q.preset), req.n, clip=req.clip)
+        except VidflowError as e:
+            raise HTTPException(422, str(e))
+        rc, out = reviews.run(cmd)
+        if rc == 124:
+            raise HTTPException(504, out)
+        if rc != 0:
+            raise HTTPException(502, f"Kiểm duyệt lỗi (mã {rc}): {out[-400:]}")
+        beat = require_beats(root).get(req.n)
+        rv = beat.clip.review if req.clip else beat.review
+        if rv is None:
+            raise HTTPException(502, "Kiểm duyệt không ghi kết quả — thử lại.")
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        return {"n": req.n, "clip": req.clip, "review": rv.model_dump(), "summary": lines[-1] if lines else ""}
 
     return router
