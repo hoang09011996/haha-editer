@@ -1,7 +1,12 @@
 """Mô hình dữ liệu project nhanh: quick.yaml + beats.json (hợp đồng với bước 6 `assemble`)."""
 from __future__ import annotations
 
+import fcntl
+import functools
 import math
+import os
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -13,6 +18,8 @@ from vidflow.state import atomic_write_text
 
 QUICK_FILE = "quick.yaml"
 BEATS_FILE = "beats.json"
+LOCK_FILE = ".vidflow.lock"
+LOCK_TIMEOUT = 10.0
 SUBDIRS = ("images", "clips", "refs", "out", "audio", "audio/beats", "logs", "tmp")
 IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png", ".webp": ".webp"}
 VIDEO_EXTS = {".mp4": ".mp4", ".mov": ".mov", ".webm": ".webm"}
@@ -174,3 +181,39 @@ def require_beats(root: Path) -> Beats:
 
 def save_beats(root: Path, beats: Beats) -> None:
     atomic_write_text(Path(root) / BEATS_FILE, beats.model_dump_json(indent=1))
+
+
+@contextmanager
+def project_lock(root: Path):
+    """Khóa ghi cấp project (flock trên <root>/.vidflow.lock) — UI, CLI và job Claude là các tiến trình riêng
+    cùng load → sửa → ghi beats.json/quick.yaml. KHÔNG lồng nhau: hàm đã giữ khóa chỉ gọi helper không khóa."""
+    root = Path(root)
+    if not root.is_dir():  # chưa có project: không có gì để bảo vệ, để hàm gọi tự báo lỗi
+        yield
+        return
+    fd = os.open(root / LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        deadline = time.monotonic() + LOCK_TIMEOUT
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise VidflowError("Project đang bận ghi, thử lại.") from None
+                time.sleep(0.02)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def locked(fn):
+    """Bọc hàm public (tham số đầu là root) để cả chuỗi load → sửa → ghi chạy dưới `project_lock`."""
+    @functools.wraps(fn)
+    def wrapper(root, *args, **kwargs):
+        with project_lock(root):
+            return fn(root, *args, **kwargs)
+    return wrapper

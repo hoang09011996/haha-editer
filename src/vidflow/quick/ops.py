@@ -9,15 +9,21 @@ from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
 from vidflow.quick.chars import CharRef, check_known, lookup, parse_refs
 from vidflow.quick.model import (IMAGE_EXTS, PROVIDERS, STAGES, Beat, Beats, Idea, LimitHit, QuickProject, Review, image_name,
-                                 load_beats, load_quick, require_beats, save_beats, save_quick)
+                                 load_beats, load_quick, locked, require_beats, save_beats, save_quick)
 from vidflow.quick.preset import Preset, load_preset
 
 PASSING = ("pass", "override")
 VOICE_FILE = "audio/voice.wav"
 
 
+@locked
 def advance(root: Path, stage: str, q: QuickProject | None = None) -> QuickProject:
-    """Chuyển stage tiến lên (không lùi)."""
+    """Chuyển stage tiến lên (không lùi). Đọc lại quick.yaml dưới khóa — `q` cũ (nếu truyền) bị bỏ qua."""
+    return _advance(root, stage)
+
+
+def _advance(root: Path, stage: str, q: QuickProject | None = None) -> QuickProject:
+    """Như `advance` nhưng KHÔNG khóa — chỉ gọi từ hàm đang giữ `project_lock` (q phải đọc dưới khóa)."""
     q = q or load_quick(root)
     if STAGES.index(stage) > STAGES.index(q.stage):
         q.stage = stage
@@ -25,6 +31,7 @@ def advance(root: Path, stage: str, q: QuickProject | None = None) -> QuickProje
     return q
 
 
+@locked
 def set_ideas(root: Path, ideas: list[dict]) -> QuickProject:
     if not 1 <= len(ideas) <= 10:
         raise VidflowError(f"Cần 1–10 ý tưởng, nhận {len(ideas)}.")
@@ -38,6 +45,7 @@ def set_ideas(root: Path, ideas: list[dict]) -> QuickProject:
     return q
 
 
+@locked
 def pick_idea(root: Path, n: int) -> QuickProject:
     q = load_quick(root)
     if not 1 <= n <= len(q.ideas):
@@ -48,6 +56,7 @@ def pick_idea(root: Path, n: int) -> QuickProject:
     return q
 
 
+@locked
 def set_beat_texts(root: Path, items: list, *, aspect: str | None = None) -> Beats:
     """Thay toàn bộ beats bằng danh sách câu (chuỗi hoặc {"text": ...}); bỏ dòng trống."""
     texts = []
@@ -81,6 +90,7 @@ def _check_cont(beat: Beat, cont: bool, q: QuickProject) -> bool:
     return cont
 
 
+@locked
 def set_prompts(root: Path, items: list[dict]) -> Beats:
     """items: [{n, prompt, verdict, score, issues?, cont?}] — ghi prompt + kết quả tự kiểm duyệt.
     `refs` tự tách từ @TÊN trong prompt; tên chưa khai báo → từ chối cả lô."""
@@ -105,7 +115,7 @@ def set_prompts(root: Path, items: list[dict]) -> Beats:
         beat.review = Review(verdict=verdict, score=float(it.get("score", 0)), issues=list(it.get("issues") or []))
     save_beats(root, beats)
     if all(b.review and b.review.verdict in PASSING for b in beats.beats):
-        advance(root, "prompted", q)
+        _advance(root, "prompted", q)
     return beats
 
 
@@ -117,6 +127,7 @@ def set_prompt(root: Path, n: int, prompt: str, *, verdict: str = "pass", score:
     return set_prompts(root, [item]).get(n)
 
 
+@locked
 def edit_prompt(root: Path, n: int, prompt: str, *, clip: bool = False) -> Beat:
     """Người dùng sửa tay prompt ảnh/clip: lưu và xóa kết quả kiểm duyệt (phải kiểm duyệt lại mới gen)."""
     q = load_quick(root)
@@ -137,6 +148,7 @@ def edit_prompt(root: Path, n: int, prompt: str, *, clip: bool = False) -> Beat:
     return beat
 
 
+@locked
 def set_review(root: Path, n: int, verdict: str, *, score: float = 0, issues: list[str] | None = None,
                clip: bool = False) -> Beat:
     """Ghi kết quả kiểm duyệt một mốc (prompt-reviewer, hoặc người dùng duyệt tay = override)."""
@@ -153,10 +165,11 @@ def set_review(root: Path, n: int, verdict: str, *, score: float = 0, issues: li
         beat.review = review
     save_beats(root, beats)
     if not clip and all(b.review and b.review.verdict in PASSING for b in beats.beats):
-        advance(root, "prompted")
+        _advance(root, "prompted")
     return beat
 
 
+@locked
 def record_fail(root: Path, n: int, reason: str, *, clip: bool = False) -> Beat:
     """Flow từ chối/lỗi: ghi lý do. Mốc lỗi bị loại khỏi danh sách việc tới khi `clear_errors`."""
     reason = reason.strip()
@@ -172,6 +185,7 @@ def record_fail(root: Path, n: int, reason: str, *, clip: bool = False) -> Beat:
     return beat
 
 
+@locked
 def clear_errors(root: Path, ns: list[int] | None = None, *, clip: bool = False) -> int:
     """Đưa mốc lỗi trở lại danh sách việc. ns rỗng/None = mọi mốc lỗi. Trả số mốc đã xóa lỗi."""
     beats = require_beats(root)
@@ -194,6 +208,7 @@ def check_provider(name: str) -> str:
     return name
 
 
+@locked
 def record_limit(root: Path, provider: str, kind: str, reason: str = "") -> QuickProject:
     """Agent báo nguồn hết lượt / đòi trả phí. Job đang chạy sẽ kết thúc mã 3."""
     check_provider(provider)
@@ -206,6 +221,7 @@ def record_limit(root: Path, provider: str, kind: str, reason: str = "") -> Quic
     return q
 
 
+@locked
 def clear_limits(root: Path, provider: str, kind: str | None = None) -> int:
     """Xóa các mốc hết lượt của một nguồn (khi bắt đầu job mới với nguồn đó); `kind` (image|video) chỉ xóa loại đó.
     Trả số mục đã xóa."""
@@ -220,6 +236,7 @@ def clear_limits(root: Path, provider: str, kind: str | None = None) -> int:
     return before - len(q.limits)
 
 
+@locked
 def set_image(root: Path, n: int, src: Path, *, provider: str = "") -> Beat:
     if provider:
         check_provider(provider)
@@ -245,10 +262,11 @@ def set_image(root: Path, n: int, src: Path, *, provider: str = "") -> Beat:
         beat.clip.status = "redo"  # clip cũ dựng từ ảnh cũ
     save_beats(root, beats)
     if all(b.status == "ok" and b.image for b in beats.beats):
-        advance(root, "imaged")
+        _advance(root, "imaged")
     return beat
 
 
+@locked
 def mark_redo(root: Path, ns: list[int], *, clip: bool = False) -> Beats:
     beats = require_beats(root)
     targets = [beats.get(n) for n in ns]  # báo lỗi trước khi ghi nếu có số sai
@@ -263,6 +281,7 @@ def mark_redo(root: Path, ns: list[int], *, clip: bool = False) -> Beats:
     return beats
 
 
+@locked
 def update_settings(root: Path, *, image_model: str | None = None, video_model: str | None = None,
                     resolution: str | None = None, max_clips: int | None = None, allow_cont: bool | None = None,
                     channel_chars: list[str] | None = None, image_provider: str | None = None,

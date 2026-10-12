@@ -6,7 +6,7 @@ from pathlib import Path
 
 from vidflow.errors import VidflowError
 from vidflow.quick.chars import check_known, lookup, parse_refs
-from vidflow.quick.model import VIDEO_EXTS, Beat, Beats, Review, image_name, load_quick, require_beats, save_beats
+from vidflow.quick.model import VIDEO_EXTS, Beat, Beats, Review, image_name, load_quick, locked, require_beats, save_beats
 from vidflow.quick.ops import PASSING, check_provider
 
 
@@ -21,6 +21,7 @@ def _check_limit(beats: Beats, new: int, max_clips: int) -> None:
                            "`vidflow quick settings --max-clips <n>`.")
 
 
+@locked
 def set_clip_enabled(root: Path, ns: list[int], on: bool) -> Beats:
     q = load_quick(root)
     beats = require_beats(root)
@@ -33,6 +34,7 @@ def set_clip_enabled(root: Path, ns: list[int], on: bool) -> Beats:
     return beats
 
 
+@locked
 def set_clip_prompts(root: Path, items: list[dict]) -> Beats:
     """items: [{n, prompt, verdict, score, issues?}] — ghi prompt clip + tự kiểm duyệt, bật clip cho mốc."""
     q = load_quick(root)
@@ -59,6 +61,7 @@ def set_clip_prompts(root: Path, items: list[dict]) -> Beats:
     return beats
 
 
+@locked
 def set_clip(root: Path, n: int, src: Path, *, provider: str = "") -> Beat:
     """Nhập clip đã gen → clips/NNN_MM-SS.<ext>."""
     if provider:

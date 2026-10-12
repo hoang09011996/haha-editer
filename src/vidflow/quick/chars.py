@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from vidflow.errors import VidflowError
-from vidflow.quick.model import IMAGE_EXTS, Character, QuickProject, load_beats, load_quick, save_quick
+from vidflow.quick.model import IMAGE_EXTS, Character, QuickProject, load_beats, load_quick, locked, save_quick
 from vidflow.quick.preset import Preset, channel_refs_dir, load_preset, save_preset
 
 REF_RE = re.compile(r"@([A-Za-z][A-Za-z0-9_]*)")
@@ -75,6 +75,7 @@ def _used_ids(root: Path) -> set[str]:
     return used
 
 
+@locked
 def set_chars(root: Path, items: list[dict]) -> QuickProject:
     """Ghi toàn bộ nhân vật riêng của video (quick-writer đề xuất, người dùng sửa)."""
     root = Path(root)
@@ -103,6 +104,7 @@ def set_chars(root: Path, items: list[dict]) -> QuickProject:
     return q
 
 
+@locked
 def set_char_image(root: Path, char_id: str, src: Path, *, channel: bool = False) -> Path:
     """Gắn ảnh sheet: video → <project>/refs/<ID>.<ext>; channel → presets/refs/<preset>/<ID>.<ext>."""
     root, src = Path(root), Path(src)
@@ -133,6 +135,7 @@ def set_char_image(root: Path, char_id: str, src: Path, *, channel: bool = False
     return dest
 
 
+@locked
 def promote(root: Path, char_id: str) -> Preset:
     """Chuyển nhân vật riêng của video vào bộ kênh (kèm ảnh). Ghi lại YAML bộ kênh."""
     root = Path(root)

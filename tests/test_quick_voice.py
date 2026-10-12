@@ -122,3 +122,34 @@ def test_voice_without_beats(tmp_path):
     create_quick(root, preset="doodle-giai-ma", title="T")
     with pytest.raises(VidflowError, match="script"):
         run(root, FakeSpeech())
+
+
+class SideEffectSpeech(FakeSpeech):
+    """Gọi `hook()` ở câu đầu — mô phỏng tiến trình khác ghi beats.json trong lúc đang đọc TTS."""
+
+    def __init__(self, hook):
+        super().__init__()
+        self.hook = hook
+
+    def synthesize(self, **kw):
+        if not self.calls:
+            self.hook()
+        return super().synthesize(**kw)
+
+
+def test_voice_keeps_concurrent_edits(qroot):
+    from vidflow.quick import ops
+
+    run(qroot, SideEffectSpeech(lambda: ops.record_fail(qroot, 2, "Flow từ chối")))
+    b = load_beats(qroot).beats
+    assert b[1].error == "Flow từ chối"  # không bị bản beats cũ ghi đè
+    assert b[0].start == 0.0 and b[-1].end > 0
+
+
+def test_voice_rejects_text_changed_mid_run(qroot):
+    from vidflow.quick import ops
+
+    with pytest.raises(VidflowError, match="đổi"):
+        run(qroot, SideEffectSpeech(lambda: ops.set_beat_texts(qroot, ["Khác hẳn."], aspect="16:9")))
+    b = load_beats(qroot).beats
+    assert [x.text for x in b] == ["Khác hẳn."] and b[0].start is None

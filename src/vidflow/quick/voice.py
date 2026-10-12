@@ -11,8 +11,8 @@ from typing import Callable
 from vidflow.config import Config
 from vidflow.errors import VidflowError
 from vidflow.media import ensure_wav
-from vidflow.quick.model import Beat, load_quick, require_beats, save_beats
-from vidflow.quick.ops import VOICE_FILE, advance
+from vidflow.quick.model import Beat, load_quick, project_lock, require_beats, save_beats
+from vidflow.quick.ops import VOICE_FILE, _advance
 from vidflow.quick.preset import Preset, load_preset
 from vidflow.retry import with_retry
 from vidflow.state import atomic_write_text
@@ -87,26 +87,33 @@ def run_voice(root: Path, cfg: Config, client: SpeechClient, *, preset: Preset |
         if on_progress:
             on_progress(done, total)
 
-    gap = b"\x00\x00" * int(round(GAP_S * RATE))
-    frames = 0
-    voice = root / VOICE_FILE
-    tmp = voice.with_suffix(".tmp.wav")
-    with wave.open(str(tmp), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(RATE)
-        for i, b in enumerate(beats.beats):
-            if i:
-                w.writeframes(gap)
-                frames += len(gap) // 2
-            pcm = _read_pcm(_beat_wav(root, b.n))
-            b.start = round(frames / RATE, 3)
-            frames += len(pcm) // 2
-            b.end = round(frames / RATE, 3)
-            w.writeframes(pcm)
-    tmp.replace(voice)
-    save_beats(root, beats)
-    advance(root, "voiced")
+    # TTS ở trên chạy lâu nên không giữ khóa; phần ghép + ghi mốc thời gian chạy dưới khóa, trên beats.json đọc lại
+    # (giữ thay đổi của tiến trình khác trong lúc đọc), và từ chối nếu lời thoại đã đổi giữa chừng.
+    spoken = [(b.n, b.text.strip()) for b in beats.beats]
+    with project_lock(root):
+        beats = require_beats(root)
+        if [(b.n, b.text.strip()) for b in beats.beats] != spoken:
+            raise VidflowError("Lời thoại đã đổi trong lúc đọc — chạy lại `vidflow quick voice`.")
+        gap = b"\x00\x00" * int(round(GAP_S * RATE))
+        frames = 0
+        voice = root / VOICE_FILE
+        tmp = voice.with_suffix(".tmp.wav")
+        with wave.open(str(tmp), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(RATE)
+            for i, b in enumerate(beats.beats):
+                if i:
+                    w.writeframes(gap)
+                    frames += len(gap) // 2
+                pcm = _read_pcm(_beat_wav(root, b.n))
+                b.start = round(frames / RATE, 3)
+                frames += len(pcm) // 2
+                b.end = round(frames / RATE, 3)
+                w.writeframes(pcm)
+        tmp.replace(voice)
+        save_beats(root, beats)
+        _advance(root, "voiced")
     return frames / RATE
 
 
