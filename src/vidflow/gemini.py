@@ -9,12 +9,17 @@ from vidflow.errors import ConfigError, VidflowError
 from vidflow.video import PollResult
 
 
+HTTP_TIMEOUT_MS = 120_000  # mỗi request Gemini tối đa 2 phút, quá thì báo lỗi để with_retry thử lại
+
+
 def gemini_client():
     if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
         raise ConfigError("Chưa có GEMINI_API_KEY trong biến môi trường.")
     from google import genai
+    from google.genai import types
 
-    return genai.Client()
+    # Không có thời gian chờ thì một kết nối bị máy chủ đóng ngang (CLOSE_WAIT) làm job treo mãi.
+    return genai.Client(http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS))
 
 
 class GeminiSpeechClient:

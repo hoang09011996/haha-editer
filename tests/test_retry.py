@@ -44,3 +44,10 @@ def test_non_transient_not_retried():
     with pytest.raises(ApiErr):
         with_retry(fn, sleep=lambda s: None)
     assert len(calls) == 1
+
+
+def test_http_transport_errors_are_transient():
+    import httpx
+    assert is_transient(httpx.ReadTimeout("treo"))
+    assert is_transient(httpx.RemoteProtocolError("máy chủ đóng kết nối"))
+    assert is_transient(httpx.ConnectError("mất mạng"))

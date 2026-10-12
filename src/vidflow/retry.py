@@ -10,6 +10,12 @@ TRANSIENT_CODES = {429, 500, 502, 503, 504}
 def is_transient(exc: BaseException) -> bool:
     if isinstance(exc, (ConnectionError, TimeoutError)):
         return True
+    try:  # lỗi mạng của httpx (SDK Gemini): hết thời gian chờ, máy chủ đóng kết nối, mất mạng
+        import httpx
+    except ImportError:
+        httpx = None
+    if httpx is not None and isinstance(exc, httpx.TransportError):
+        return True
     return getattr(exc, "code", None) in TRANSIENT_CODES
 
 
