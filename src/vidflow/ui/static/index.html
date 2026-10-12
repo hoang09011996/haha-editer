@@ -2,34 +2,45 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>vidflow Studio</title>
-<meta name="color-scheme" content="dark">
+<title>vidflow</title>
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div class="nebula"></div><canvas id="stars" aria-hidden="true"></canvas>
-<header>
-  <h1 id="homeBtn" title="Trang chủ" style="cursor:pointer">vidflow</h1>
-  <select id="projectSel" aria-label="Chọn project"></select>
-  <button id="newBtn">+ Video mới</button>
-  <span style="flex:1"></span>
-  <span id="jobPill" class="pill">Rảnh</span>
-  <form method="post" action="/logout" style="margin:0"><button title="Đăng xuất">⎋</button></form>
-</header>
-<main id="main"><div class="empty">Đang tải…</div></main>
+<div class="shell">
+  <nav class="rail" aria-label="Điều hướng">
+    <button class="brand" id="homeBtn" type="button" title="Trang chủ">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#000080"/><path d="M8 9l6 10 6-10" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="20" r="2.6" fill="#1fba00"/></svg>
+      <span>vidflow</span>
+    </button>
+    <div class="current" id="currentBox" hidden></div>
+    <div class="rail-pick">
+      <select id="projectSel" aria-label="Chọn video"></select>
+      <button id="newBtn" type="button">Video mới</button>
+    </div>
+    <div id="railNav"></div>
+    <div class="rail-foot">
+      <span class="kv">Việc nền <span id="jobPill" class="pill">Rảnh</span></span>
+      <form method="post" action="/logout"><button type="submit" class="small">Đăng xuất</button></form>
+    </div>
+  </nav>
+  <main id="main"><div class="empty">Đang tải…</div></main>
+</div>
 <div class="savebar" id="savebar" hidden>
   <span id="dirtyMark"></span>
   <button id="reloadBtn">Hoàn tác thay đổi</button>
   <button id="saveBtn" class="primary">Lưu (Cmd+S)</button>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <dialog id="newDlg">
   <form method="dialog" id="newForm">
-    <h3 style="margin-top:0">✦ Video mới</h3>
+    <h3>Video chi tiết mới</h3>
     <p class="hint">Chỉ cần ý tưởng + model. AI sẽ viết phần còn lại, bạn duyệt từng bước.</p>
     <div class="grid">
-      <label class="f wide"><span class="flabel">💡 Ý tưởng (1–2 câu: chuyện gì, ai, cảm xúc, dài bao lâu)</span>
+      <label class="f wide"><span class="flabel">Ý tưởng (1–2 câu: chuyện gì, ai, cảm xúc, dài bao lâu)</span>
         <textarea name="idea" required rows="3" placeholder="vd: video hài 20s về cà phê sáng, nhân vật đeo kính tóc rẽ ngôi"></textarea>
         <span class="hint">Ví dụ — bấm để dùng:</span><div class="chips" id="ideaEx"></div></label>
       <label class="f"><span class="flabel">Tựa</span><input type="text" name="title" required></label>
@@ -38,14 +49,13 @@
       <label class="f"><span class="flabel">Tỉ lệ</span><select name="aspect"><option>9:16</option><option>16:9</option></select></label>
       <label class="f"><span class="flabel">Model video (Google Flow) — bắt buộc</span><select name="video_model" required><option value="">— chọn —</option><option>Veo 3.1 Lite</option><option>Veo 3.1 Fast</option><option>Veo 3.1 Quality</option><option>Omni 1.1 Flash</option></select></label>
       <label class="f"><span class="flabel">Độ phân giải tải về</span><select name="resolution"><option>720p</option><option>1080p</option></select></label>
-      <div class="checks wide"><label><input type="checkbox" name="start" checked> ✨ Cho AI viết kịch bản chi tiết ngay sau khi tạo</label></div>
+      <div class="checks wide"><label><input type="checkbox" name="start" checked> Cho AI viết kịch bản chi tiết ngay sau khi tạo</label></div>
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:14px">
       <button value="cancel" formnovalidate>Hủy</button><button value="ok" class="primary">Tạo video</button>
     </div>
   </form>
 </dialog>
-<script src="/static/galaxy.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

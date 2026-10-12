@@ -16,16 +16,18 @@ SESSION_TTL_S = 7 * 24 * 3600
 OPEN_PATHS = ("/login", "/logout")
 
 LOGIN_HTML = """<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>vidflow · Đăng nhập</title><style>
-body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Arial,sans-serif;color:#eef1ff;
-background:radial-gradient(40% 35% at 20% 25%,rgba(139,92,246,.35),transparent 70%),radial-gradient(45% 40% at 70% 80%,rgba(0,105,186,.35),transparent 70%),#03021a}
-form{width:min(360px,90vw);padding:28px;border-radius:20px;background:rgba(18,16,64,.6);border:1px solid rgba(160,170,255,.25);box-shadow:0 0 50px rgba(139,92,246,.35)}
-h1{margin:0 0 18px;font-size:22px}h1 span{color:#fbbf24}
-input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid rgba(160,170,255,.3);background:rgba(5,4,40,.7);color:#fff;font-size:15px}
-button{margin-top:14px;width:100%;padding:10px;border:none;border-radius:999px;color:#fff;font-size:15px;cursor:pointer;background:linear-gradient(135deg,#0069ba,#8b5cf6)}
-p{color:#ff8fa3;font-size:13px;min-height:1em}</style></head><body>
-<form method="post" action="/login"><h1><span>✦</span> vidflow Studio</h1>
-<label>Mật khẩu<br><input type="password" name="password" autofocus autocomplete="current-password"></label>
+<title>vidflow · Đăng nhập</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap"><style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:"Be Vietnam Pro","Helvetica Neue",Arial,sans-serif;color:#0E1238;background:#E3EBE2}
+form{width:min(360px,90vw);padding:28px;border-radius:16px;background:#F2F6F1;border:1px solid #CCD8CB}
+h1{margin:0 0 18px;font-size:22px;font-weight:800;letter-spacing:-.4px}
+label{font-size:13px;font-weight:600;color:#4A4F6E}
+input{width:100%;box-sizing:border-box;margin-top:6px;min-height:44px;padding:0 12px;border-radius:8px;border:1px solid #B8C7B7;background:#EAF1E9;color:#0E1238;font:inherit;font-size:15px}
+input:focus{outline:2px solid #0069ba;outline-offset:1px}
+button{margin-top:14px;width:100%;min-height:44px;border:none;border-radius:8px;color:#fff;font:inherit;font-weight:700;font-size:15px;cursor:pointer;background:#000080}
+p{color:#C8283E;font-size:13px;min-height:1em}</style></head><body>
+<form method="post" action="/login"><h1>vidflow</h1>
+<label>Mật khẩu<input type="password" name="password" autofocus autocomplete="current-password"></label>
 <p>{msg}</p><button>Đăng nhập</button></form></body></html>"""
 
 

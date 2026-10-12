@@ -225,14 +225,22 @@ async function save() {
 function currentStep() { return STEPS.find(s => !s.done(S.data)) || STEPS[STEPS.length - 1]; }
 
 // ================= bố cục =================
+function setCurrent(eyebrow, title, meta) {
+  const box = document.getElementById("currentBox");
+  box.hidden = !title;
+  box.replaceChildren(h("span", { class: "eyebrow" }, eyebrow || ""), h("b", {}, title || ""), h("span", { class: "meta" }, meta || ""));
+}
 function render() {
   document.getElementById("savebar").hidden = !S.name;
-  const shell = document.getElementById("main");
-  if (!S.name || !S.data) { shell.className = "home"; shell.replaceChildren(renderHome()); return; }
+  const shell = document.getElementById("main"), nav = document.getElementById("railNav");
+  if (!S.name || !S.data) { shell.className = "home"; nav.replaceChildren(); setCurrent(); shell.replaceChildren(renderHome()); return; }
   shell.className = "app";
   const step = STEPS.find(s => s.id === S.step) || STEPS[0];
   const view = { idea: vIdea, cast: vCast, story: vStory, shots: vShots, voice: vVoice, video: vVideo, build: vBuild }[step.id]();
-  shell.replaceChildren(renderSidebar(), h("section", { class: "content" }, h("h2", { class: "ptitle" }, S.data.script.title), guide(step), view, stepNav(step)), renderAssistant());
+  const sc = S.data.script;
+  setCurrent("Video chi tiết", sc.title, `${(sc.scenes || []).length} cảnh · ${sc.aspect}`);
+  nav.replaceChildren(renderSidebar());
+  shell.replaceChildren(h("section", { class: "content" }, h("h2", { class: "ptitle" }, sc.title), guide(step), view, stepNav(step)), renderAssistant());
 }
 function renderSidebar() {
   const cur = currentStep();
