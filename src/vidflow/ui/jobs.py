@@ -8,6 +8,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from vidflow.errors import VidflowError
+from vidflow.quick import jobs as qjobs
+from vidflow.ui.quick_jobs import QUICK_LABELS, build_quick_cmd, check_provider
+
 REPO = Path(__file__).resolve().parents[3]
 AGENTS = REPO / ".claude" / "agents"
 
@@ -96,17 +100,41 @@ class Job:
     started_at: str
     scenes: list[str] | None = None
     _log_file: object = field(default=None, repr=False)
+    label: str = ""
+    stopped: bool = False
+    provider: str = ""  # nguồn gen thực dùng (flow | gemini | aistudio) — chỉ job nhanh sheets/flow/clips
+    root: Path | None = None
 
     @property
     def state(self) -> str:
         rc = self.proc.poll()
-        return "running" if rc is None else ("done" if rc == 0 else "failed")
+        if rc is None:
+            return "running"
+        if self.stopped:
+            return "stopped"
+        return "done" if rc == 0 else "failed"
+
+    @property
+    def quota_exhausted(self) -> bool:
+        """Job gen kết thúc vì hết lượt: không bị dừng tay, và mã 3 hoặc nguồn có mốc hết lượt cho loại media của job."""
+        rc = self.proc.poll()
+        if rc is None or self.stopped:
+            return False
+        if rc == 3:
+            return True
+        if not self.provider or self.root is None:
+            return False
+        try:
+            return qjobs.limit_hit(self.root, self.provider, self.kind) is not None
+        except (VidflowError, OSError):
+            return False
 
     def to_dict(self, tail: int = 20000) -> dict:
         text = self.log_path.read_text(encoding="utf-8", errors="replace") if self.log_path.exists() else ""
-        return {"kind": self.kind, "label": LABELS.get(self.kind, self.kind), "project": self.project,
+        return {"kind": self.kind, "label": self.label or LABELS.get(self.kind, self.kind), "project": self.project,
                 "state": self.state, "returncode": self.proc.poll(), "started_at": self.started_at,
-                "scenes": self.scenes, "log": text[-tail:]}
+                "scenes": self.scenes, "log": text[-tail:], "provider": self.provider,
+                "quota_exhausted": self.quota_exhausted}
 
 
 class JobRunner:
@@ -117,24 +145,53 @@ class JobRunner:
     def command_for(self, kind: str, project_root: Path, scenes: list[str] | None, instruction: str = "") -> list[str]:
         return build_job_cmd(kind, project_root, scenes, instruction)
 
+    def quick_command_for(self, kind: str, project_root: Path, instruction: str = "",
+                          options: dict | None = None, provider: str | None = None) -> list[str]:
+        return build_quick_cmd(kind, project_root, instruction, options, provider)
+
     def busy(self) -> bool:
         return self.current is not None and self.current.state == "running"
 
     def start(self, kind: str, project: str, project_root: Path, scenes: list[str] | None = None,
-              instruction: str = "") -> Job:
+              instruction: str = "", *, quick: bool = False, options: dict | None = None,
+              provider: str | None = None) -> Job:
         with self._lock:
             if self.busy():
-                raise RuntimeError(f"Đang chạy: {LABELS.get(self.current.kind, self.current.kind)}")
-            if kind == "assist" and not instruction.strip():
-                raise ValueError("Cần nội dung yêu cầu cho AI")
+                raise RuntimeError(f"Đang chạy: {self.current.label or LABELS.get(self.current.kind, self.current.kind)}")
+            if quick:
+                check_provider(kind, provider)
+                if kind in qjobs.GEN_KINDS:
+                    # chọn nguồn thực dùng + xóa mốc hết lượt cũ của nguồn đó, ngay trước khi chạy
+                    provider = qjobs.begin_gen(project_root, kind, provider)
+                cmd = self.quick_command_for(kind, project_root, instruction, options, provider)
+                label = QUICK_LABELS.get(kind, kind)
+            else:
+                if kind == "assist" and not instruction.strip():
+                    raise ValueError("Cần nội dung yêu cầu cho AI")
+                cmd = (self.command_for(kind, project_root, scenes, instruction) if instruction
+                       else self.command_for(kind, project_root, scenes))
+                label = LABELS.get(kind, kind)
             logs = project_root / "logs"
             logs.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             log_path = logs / f"job-{stamp}-{kind}.log"
             f = open(log_path, "w", encoding="utf-8")
-            cmd = self.command_for(kind, project_root, scenes, instruction) if instruction else \
-                self.command_for(kind, project_root, scenes)
-            proc = subprocess.Popen(cmd, cwd=REPO, stdout=f,
-                                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-            self.current = Job(kind, project, log_path, proc, stamp, scenes, f)
+            proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            self.current = Job(kind, project, log_path, proc, stamp, scenes, f, label=label,
+                               provider=provider or "", root=project_root)
             return self.current
+
+    def stop(self) -> bool:
+        """Dừng việc đang chạy (nút "Tạm dừng"). Trả False nếu không có việc nào đang chạy."""
+        with self._lock:
+            if not self.busy():
+                return False
+            job = self.current
+            job.stopped = True
+            job.proc.terminate()
+            try:
+                job.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                job.proc.kill()
+                job.proc.wait()
+            return True
