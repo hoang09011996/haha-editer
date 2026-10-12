@@ -280,3 +280,17 @@ def test_integration_doodle_112(acfg):
         assert a["target_timerange"]["start"] + a["target_timerange"]["duration"] == b["target_timerange"]["start"]
     last = segs[-1]["target_timerange"]
     assert last["start"] + last["duration"] == (487 + 4) * 1_000_000
+
+
+@needs_ffmpeg
+def test_assemble_clamps_clip_speed(small_images, acfg, tmp_path):
+    from conftest import make_mp4
+
+    tiny = make_mp4(tmp_path / "dl" / "004_00-05.mp4", 0.2)  # mốc 4 dài 4 s → cần x0.05 < 0.1
+    rep = run(small_images, acfg, clips={4: tiny})
+    s4 = track_segs(load(rep.draft_dir), "video")[3]
+    assert s4["speed"] == pytest.approx(0.1, rel=0.01)
+    src = s4["source_timerange"]["duration"]
+    assert s4["target_timerange"]["duration"] == pytest.approx(src * 10, abs=10)
+    assert s4["target_timerange"]["duration"] < 4_000_000
+    assert any("4" in w and "0.1" in w for w in rep.warnings)

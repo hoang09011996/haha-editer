@@ -204,8 +204,14 @@ def assemble(images_dir: Path, *, audio: Path | None = None, beats: Path | None 
                 path = _MediaStage(_Dir(clip_path.parent), stage_root / "clips")(clip_path.name)
                 mat = materials.get(path) or materials.setdefault(path, cc.VideoMaterial(path))
                 base = cover_scale(mat.width, mat.height, w, h)
-                draft.add_segment(cc.VideoSegment(mat, cc.Timerange(a, b - a),
-                                                  source_timerange=cc.Timerange(0, min(mat.duration, b - a)),
+                src_len = min(mat.duration, b - a)
+                dur = b - a
+                if src_len * 10 < dur:  # tốc độ < x0.1 (giới hạn CapCut) → giữ x0.1, clip phủ ngắn hơn mốc
+                    dur = src_len * 10
+                    warnings.append(f"Mốc {p.n}: clip quá ngắn so với mốc (cần tốc độ x{src_len / (b - a):.2f}), "
+                                    f"giữ x0.1 — clip chỉ phủ {dur / 1e6:.2f}s/{(b - a) / 1e6:.2f}s.")
+                draft.add_segment(cc.VideoSegment(mat, cc.Timerange(a, dur),
+                                                  source_timerange=cc.Timerange(0, src_len),
                                                   clip_settings=cc.ClipSettings(scale_x=base, scale_y=base),
                                                   volume=CLIP_VOLUME))
                 n_clips += 1
