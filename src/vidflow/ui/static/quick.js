@@ -83,7 +83,9 @@ Q.render = function (opts = {}) {
   // vẽ lại khung phải trong lúc đang gõ (vd. kết quả kiểm duyệt cùng mốc): nhớ ô + con trỏ để trả lại sau khi vẽ
   const ae = document.activeElement, focusKey = !keep && ae && main.querySelector(".panel")?.contains(ae) ? ae.getAttribute("aria-label") : null;
   const caret = focusKey && "selectionStart" in ae ? [ae.selectionStart, ae.selectionEnd, ae.scrollTop] : null;
-  if (!keep) main.querySelectorAll("audio, video").forEach(m => m.pause());
+  // trình phát Xem thử bị vẽ lại / rời màn: dừng tiếng + vòng vẽ (phần tử cũ tách khỏi trang vẫn phát nếu không dừng)
+  main.querySelectorAll("audio, video").forEach(m => { if (!keep || !keep.contains(m)) m.pause(); });
+  if (Q.player) { cancelAnimationFrame(Q.player.raf); Q.player = null; }
   setCurrent(d.preset.name, d.quick.title || d.name, [d.status.voice_s ? fmtT(d.status.voice_s) : null, `${d.beats.length} mốc`, d.aspect].filter(Boolean).join(" · "));
   document.getElementById("railNav").replaceChildren(qRail());
   const [center, panel] = (QSCREENS[Q.screen] || QSCREENS.board)();
@@ -415,12 +417,14 @@ function qChars() {
     group("video", "Riêng video này", "AI đề xuất từ kịch bản, bạn duyệt trước khi gen ảnh mốc", "Chưa có — AI đề xuất sau bước kịch bản.")), null];
 }
 function qCharCard(c) {
-  const busy = S.job?.state === "running", missing = !c.image_url;
+  // thiếu ảnh: cảnh báo chỉ khi có mốc dùng (cùng quy tắc số "N thiếu" trên thanh trái); không mốc nào dùng → nhãn trung tính
+  const busy = S.job?.state === "running", missing = !c.image_url, warn = missing && c.uses > 0;
   const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", hidden: true, "aria-label": `Ảnh @${c.id}` });
   file.onchange = () => { const f = file.files[0]; file.value = ""; if (f) qUpload(c.id, f); };
-  return h("article", { class: "char-card" + (missing ? " missing" : "") },
-    missing ? h("div", { class: "missing-box" }, h("strong", {}, "Chưa có character sheet"),
+  return h("article", { class: "char-card" + (warn ? " missing" : "") },
+    warn ? h("div", { class: "missing-box" }, h("strong", {}, "Chưa có character sheet"),
       h("span", {}, c.blocked ? `${c.blocked} mốc đang bị chặn gen` : "Chưa mốc nào bị chặn"))
+      : missing ? h("div", { class: "missing-box neutral" }, h("strong", {}, "Chưa có ảnh"), h("span", {}, "Chưa mốc nào dùng nhân vật này"))
       : h("img", { class: "sheet", src: c.image_url, alt: `Character sheet @${c.id}` }),
     h("div", { class: "char-body" },
       h("div", { class: "char-h" }, h("span", { class: "swatch", style: `background:${qColor(c.color, "var(--muted)")}` }), h("span", { class: "mono cid" }, "@" + c.id),
@@ -428,8 +432,8 @@ function qCharCard(c) {
       h("p", { class: "char-desc" }, c.desc || ""),
       h("div", { class: "row" }, file,
         missing ? h("button", { class: "primary small", disabled: busy, onclick: () => qJob("sheets") }, `Gen sheet (${provLabel(qProvider("sheets"))})`) : null,
-        h("button", { class: "small", onclick: () => file.click() }, missing ? "Tải ảnh lên" : "Thay ảnh"),
-        c.scope === "video" ? h("button", { class: "small", onclick: () => qPromote(c.id) }, "Đưa vào bộ kênh") : null)));
+        h("button", { class: "small", disabled: busy, onclick: () => file.click() }, missing ? "Tải ảnh lên" : "Thay ảnh"),
+        c.scope === "video" ? h("button", { class: "small", disabled: busy, onclick: () => qPromote(c.id) }, "Đưa vào bộ kênh") : null)));
 }
 async function qUpload(id, f) {
   const name = Q.name, fd = new FormData(); fd.append("file", f);
@@ -520,3 +524,130 @@ Q.openNew = async function () {
   document.body.append(dlg);
   dlg.showModal();
 };
+
+// ================= Xem thử & Xuất =================
+// clip được dùng khi xuất (giống clips.ready_clips): bật + đã có file
+function qHasClip(b) { return !!(b.clip.enabled && b.clip.status === "ok" && b.clip_url); }
+function qPreview() {
+  const d = Q.data, beats = d.beats.filter(b => b.start != null && b.end != null);
+  const center = h("section", { class: "content" }, h("h1", { class: "page-h" }, "Xem thử"));
+  if (!beats.length || !d.voice_url) center.append(h("div", { class: "card" }, h("p", {}, "Chưa có giọng đọc và thời gian mốc — chạy bước Giọng đọc trên Bảng mốc trước.")));
+  else center.append(qPlayer(beats), qTimeline(beats));
+  return [center, qExport()];
+}
+function qPlayer(beats) {
+  const d = Q.data, total = Math.max(0.1, beats[beats.length - 1].end);
+  const audio = h("audio", { src: d.voice_url, preload: "auto" });
+  const img = h("img", { alt: "" }), vid = h("video", { playsinline: true, preload: "auto" });
+  vid.muted = true; // clip phát không tiếng: giọng đọc là <audio>
+  const ph = h("div", { class: "stage-ph" }), sub = h("div", { class: "subtitle" });
+  const ratio = /^\d+:\d+$/.test(d.aspect || "") ? d.aspect.replace(":", " / ") : "16 / 9";
+  const stage = h("div", { class: "stage", style: `aspect-ratio:${ratio}` }, img, vid, ph, sub);
+  const time = h("span", { class: "mono" }), cur = h("span", { class: "mono now-tag" });
+  const subOn = h("input", { type: "checkbox" }); subOn.checked = true;
+  const playBtn = h("button", { class: "play" }, "Phát");
+  let idx = -1;
+  const find = t => { let lo = 0, hi = beats.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (beats[m].start <= t) lo = m; else hi = m - 1; } return lo; };
+  const show = (i, t) => {
+    const b = beats[i];
+    if (i !== idx) {
+      idx = i;
+      const clip = qHasClip(b);
+      img.hidden = !(b.image_url && !clip); vid.hidden = !clip; ph.hidden = !!(b.image_url || clip);
+      if (!img.hidden) img.src = b.image_url;
+      if (clip) vid.src = b.clip_url; else vid.removeAttribute("src");
+      ph.textContent = `Mốc ${pad3(b.n)} chưa có ảnh`;
+      sub.textContent = b.text;
+      cur.textContent = `${pad3(b.n)}${clip ? " · CLIP" : ""}`;
+      P.mark(b.n);
+    }
+    if (!vid.hidden) {
+      const want = Math.max(0, Math.min(t - b.start, (vid.duration || 99) - 0.05)); // clip ngắn hơn mốc → giữ khung cuối
+      if (Math.abs(vid.currentTime - want) > 0.3) vid.currentTime = want;
+      if (!audio.paused && vid.paused) vid.play().catch(() => {});
+      if (audio.paused && !vid.paused) vid.pause();
+    }
+    sub.hidden = !subOn.checked;
+    time.textContent = `${fmtT1(t)} / ${fmtT1(total)}`;
+  };
+  const tick = () => {
+    if (Q.player !== P) return; // trình phát cũ (đã vẽ lại / rời màn): không ghi đè trình phát mới
+    show(find(audio.currentTime), audio.currentTime);
+    P.head(audio.currentTime / total);
+    if (!audio.paused) P.raf = requestAnimationFrame(tick);
+  };
+  const P = { seek: t => { audio.currentTime = t; tick(); }, head: () => {}, mark: () => {}, raf: 0 };
+  Q.player = P;
+  audio.onplay = () => { playBtn.textContent = "Dừng"; cancelAnimationFrame(P.raf); tick(); };
+  audio.onpause = () => { playBtn.textContent = "Phát"; vid.pause(); cancelAnimationFrame(P.raf); tick(); };
+  audio.onseeked = tick;
+  audio.onerror = () => { if (Q.player === P) qSay(Q.name, "Không tải được giọng đọc", true); };
+  subOn.onchange = tick;
+  playBtn.onclick = () => (audio.paused ? audio.play().catch(() => {}) : audio.pause());
+  const step = dir => { const i = Math.max(0, Math.min(beats.length - 1, find(audio.currentTime) + dir)); P.seek(beats[i].start + 0.01); };
+  setTimeout(tick, 0);
+  return h("div", { class: "player" }, stage, audio,
+    h("div", { class: "controls" }, h("button", { onclick: () => step(-1) }, "Mốc trước"), playBtn, h("button", { onclick: () => step(1) }, "Mốc sau"),
+      time, cur, h("span", { class: "grow" }), h("label", { class: "row" }, subOn, "Phụ đề")));
+}
+function qTimeline(beats) {
+  const total = beats[beats.length - 1].end, scenes = qSceneList(beats), colorOf = new Map();
+  scenes.forEach(sc => sc.beats.forEach(b => colorOf.set(b.n, sc.color)));
+  const segs = beats.map(b => {
+    const color = colorOf.get(b.n), kind = b.state === "ok" ? "ok" : b.state === "gen" ? "gen" : b.state === "error" ? "error" : "none";
+    const clip = qHasClip(b), label = QST[b.state][0];
+    const style = `flex:${Math.max(0.05, b.end - b.start)};` + (kind === "ok" ? `background:${color}` : kind === "gen" ? `background:${color};opacity:.45` : "");
+    return h("button", { class: `seg ${kind}${clip ? " clip" : ""}`, style, title: `Mốc ${pad3(b.n)} · ${fmtT(b.start)} · ${label}${clip ? " · clip" : ""}`,
+      "aria-label": `Mốc ${b.n}: ${label}${clip ? ", có clip" : ""}`, onclick: () => Q.player && Q.player.seek(b.start + 0.01) });
+  });
+  const head = h("span", { class: "playhead" });
+  if (Q.player) {
+    Q.player.head = frac => { head.style.left = `${Math.min(100, Math.max(0, frac * 100))}%`; };
+    Q.player.mark = n => segs.forEach((s, i) => s.classList.toggle("cur", beats[i].n === n));
+  }
+  const wave = h("div", { class: "wave", role: "img", "aria-label": "Sóng âm giọng đọc" });
+  qLoadWave(wave);
+  const key = (style, label) => h("span", {}, h("i", { style }), label);
+  return h("section", { class: "timeline", "aria-label": "Dòng thời gian" },
+    h("div", { class: "row between" }, h("h2", {}, "Dòng thời gian"), h("span", { class: "hint" }, `bấm mốc để nhảy tới · ${fmtT(total)}`)),
+    h("div", { class: "scene-labels" }, scenes.map(sc => h("span", { style: `flex:${Math.max(0.05, sc.beats[sc.beats.length - 1].end - sc.beats[0].start)}`, title: `Cảnh ${sc.index}` }, `Cảnh ${sc.index}`))),
+    h("div", { class: "segs-wrap" }, h("div", { class: "segs" }, segs, head)),
+    wave,
+    h("div", { class: "legend" }, key("background:#3557D6", "có ảnh (màu theo cảnh)"), key("background:var(--track);border-bottom:4px solid var(--primary)", "clip động"),
+      key("background:#F4C7CF;border:1px solid var(--error)", "lỗi"), key("background:#3557D6;opacity:.45", "đang gen"), key("background:var(--track)", "chưa có ảnh")));
+}
+async function qLoadWave(el) {
+  const name = Q.name;
+  try {
+    if (!Q.wave) {
+      const peaks = (await api(`/api/quick/${name}/waveform?bins=300`)).peaks;
+      if (Q.name !== name) return; // đã mở video khác
+      Q.wave = peaks;
+    }
+    el.replaceChildren(...Q.wave.map(p => h("span", { style: `height:${Math.max(2, p * 28).toFixed(1)}px` })));
+  } catch { el.replaceChildren(h("span", { class: "hint" }, "Không đọc được sóng âm")); }
+}
+function qExport() {
+  const d = Q.data, o = Q.exportOpts, busy = S.job?.state === "running";
+  const sel = (key, label, opts) => { const s = h("select", { "aria-label": label }, opts.map(([v, l]) => h("option", { value: v }, l))); s.value = o[key]; s.onchange = () => { o[key] = s.value; }; return h("label", { class: "f" }, h("span", { class: "flabel" }, label), s); };
+  const tog = (key, label) => { const c = h("input", { type: "checkbox" }); c.checked = o[key]; c.onchange = () => { o[key] = c.checked; }; return h("label", { class: "switch" }, h("span", {}, label), c); };
+  const noimg = d.beats.filter(b => b.state !== "ok").length;
+  const job = d.job && ["render", "build"].includes(d.job.kind) ? d.job : null;
+  return h("aside", { class: "panel", "aria-label": "Xuất video" }, h("div", { class: "detail" },
+    h("div", { class: "detail-h" }, h("h2", {}, "Xuất MP4"), h("span", { class: "grow" }), h("span", { class: "badge" }, "Remotion · mặc định")),
+    h("div", { class: "grid2" },
+      sel("resolution", "Độ phân giải", [["1080p", "1080p"], ["720p", "720p"]]),
+      sel("transition", "Chuyển cảnh", [["scene", "Theo cảnh"], ["cut", "Cắt thẳng"], ["fade", "Mờ chéo"]])),
+    sel("clip_fit", "Clip dài hơn mốc", [["trim", "Cắt bớt cho vừa mốc"], ["speed", "Tăng tốc cho vừa mốc"]]),
+    h("div", { class: "toggles" }, tog("zoom", "Zoom chậm trên ảnh tĩnh"), tog("subtitles", "Phụ đề theo giọng"), tog("logo", "Logo kênh"),
+      tog("clip_audio", "Âm thanh trong clip Veo"), tog("music", "Nhạc nền")),
+    noimg ? h("p", { class: "notice warn" }, `Còn ${noimg} mốc chưa có ảnh sẽ hiện khung trống. Nên gen xong trước khi xuất bản cuối.`) : null,
+    h("button", { class: "primary", disabled: busy || !d.beats.length, onclick: () => qJob("render", { options: { ...o } }) }, "Xuất MP4"),
+    h("div", { class: "subcard" }, h("b", {}, "Draft CapCut"), h("span", { class: "hint" }, "Tùy chọn, khi cần chỉnh tay. Phải đóng CapCut trước khi dựng."),
+      h("button", { disabled: busy || !d.beats.length, onclick: () => qJob("build", { options: { zoom: o.zoom, subtitles: o.subtitles } }) }, "Dựng draft CapCut")),
+    h("div", { class: "subcard" }, h("b", {}, "Bản đã xuất"),
+      d.renders.length ? d.renders.map(r => { const f = r.file.replace(/^out\//, ""); return h("div", { class: "row between" }, h("span", { class: "mono" }, `${f} · ${r.size_mb} MB`), h("a", { href: r.url, download: f }, "Tải")); })
+        : h("span", { class: "hint" }, "Chưa có bản nào.")),
+    job ? h("div", { class: "subcard" }, h("b", {}, `${job.label}: ${QJOB[job.state] || job.state}`), h("pre", { class: "log", id: "log" }, job.log || "(đang chạy…)")) : null));
+}
+QSCREENS.preview = qPreview;

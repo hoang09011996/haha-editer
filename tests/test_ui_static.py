@@ -118,3 +118,34 @@ def test_quick_new_dialog_and_home():
     assert "Q.openNew = async function" in js and "Tạo và đề xuất ý tưởng" in js and "Model clip động · bắt buộc" in js
     assert "Nguồn gen ảnh" in js and "Nguồn gen clip" in js and "image_provider: f.image_provider" in js
     assert "Q.openNew()" in app and "Video nhanh" in app
+
+
+def test_quick_preview_screen_registered():
+    js = _read("quick.js")
+    assert "QSCREENS.preview = qPreview" in js and "Xuất MP4" in js and "Dựng draft CapCut" in js
+    assert "kéo mép" not in js.lower()  # đổi thời lượng bằng kéo mép: ngoài phạm vi
+    assert "/waveform?bins=300" in js and 'qJob("render"' in js and 'qJob("build"' in js
+    css = _read("style.css")
+    assert ".stage{" in css and ".segs{" in css and ".playhead{" in css
+
+
+def test_quick_preview_stops_media_and_loop():
+    js = _read("quick.js")
+    render = js[js.index("Q.render = function"):]
+    render = render[: render.index("\n};\n")]
+    assert "cancelAnimationFrame" in render and "Q.player = null" in render  # rời màn → dừng vòng vẽ
+    assert 'querySelectorAll("audio, video")' in render
+    player = js[js.index("function qPlayer("):]
+    player = player[: player.index("\n}\n")]
+    assert "Q.player !== P" in player  # vòng vẽ cũ không ghi đè trình phát mới
+
+
+def test_quick_chars_followups():
+    js = _read("quick.js")
+    promote = js[js.index("async function qPromote("):]
+    promote = promote[: promote.index("\n}\n")]
+    assert promote.index("confirm(") < promote.index("/promote")  # hỏi trước khi gọi API
+    card = js[js.index("function qCharCard("):]
+    card = card[: card.index("\n}\n")]
+    assert "c.uses > 0" in card  # cùng quy tắc với số "N thiếu" trên thanh trái
+    assert card.count("disabled: busy") >= 3  # Gen sheet, tải ảnh, đưa vào bộ kênh
