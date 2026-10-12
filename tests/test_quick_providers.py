@@ -103,7 +103,7 @@ def test_job_exits_3_when_agent_records_limit(qroot, P, monkeypatch):
     monkeypatch.setattr(jobs_mod, "run_claude", fake_run)
     r = runner.invoke(app, ["quick", "flow", "-p", str(qroot)])
     assert r.exit_code == 3
-    assert "Hết lượt" in r.output and "flow" in r.output
+    assert "Hết lượt" in r.output and "ở flow" in r.output
     hits = [(x.provider, x.kind) for x in load_quick(qroot).limits]
     assert hits == [("gemini", "image"), ("flow", "image")]
 

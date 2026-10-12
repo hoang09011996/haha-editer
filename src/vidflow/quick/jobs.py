@@ -8,6 +8,7 @@ from typing import IO
 from vidflow.quick.preset import REPO, Preset, brief_path
 
 AGENTS = REPO / ".claude" / "agents"
+GUIDES = REPO / ".claude" / "guides"
 QUICK_KINDS = ("ideas", "script", "prompts", "sheets", "flow", "clips")
 CHROME_KINDS = ("sheets", "flow", "clips")
 PROVIDER_LABELS = {
@@ -51,7 +52,7 @@ def _operator(provider: str, section: str, writer: Path) -> str:
     extra = (f" và {AGENTS / 'flow-operator.md'} (kiến thức giao diện Flow, tải file, điều kiện dừng)"
              if provider == "flow" else "")
     return (f"Bạn là operator gen trên {label}, dùng phiên Chrome đã đăng nhập của người dùng. Đọc và tuân thủ mục "
-            f"'{provider}' trong {AGENTS / 'gen-providers.md'}{extra}, và mục '{section}' trong {writer}.")
+            f"'{provider}' trong {GUIDES / 'gen-providers.md'}{extra}, và mục '{section}' trong {writer}.")
 
 
 def _limit_rule(cli: str, root: Path, provider: str, kind: str) -> str:
@@ -111,8 +112,8 @@ def claude_task(kind: str, project_root: Path, preset: Preset, provider: str = "
         return (f"{_operator(provider, 'Gen character sheet', writer)} {common} Lấy nhân vật bằng "
                 f"`{cli} chars -p {root} --json`; với mỗi nhân vật có `image` null và `uses` > 0: gen MỘT ảnh "
                 f"character sheet trên {label} (tỉ lệ 16:9, x1) theo mẫu prompt trong mục đó, tải về rồi chạy "
-                f"`{cli} char-image -p {root} <ID> \"<file>\"` (thêm `--channel` khi `scope` là channel; nguồn: "
-                f"--provider {provider} chỉ để ghi nhận trong báo cáo). {_limit_rule(cli, root, provider, 'image')} "
+                f"`{cli} char-image -p {root} <ID> \"<file>\"` (thêm `--channel` khi `scope` là channel; KHÔNG thêm --provider vào "
+                f"char-image — chỉ ghi nguồn --provider {provider} trong báo cáo). {_limit_rule(cli, root, provider, 'image')} "
                 "Báo cáo: nhân vật đã gen, nhân vật lỗi kèm lý do, lượt/tín dụng còn lại nếu thấy.")
     if kind == "clips":
         label = PROVIDER_LABELS.get(provider, provider)

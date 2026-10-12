@@ -1,7 +1,6 @@
----
-name: gen-providers
-description: Hướng dẫn thao tác các nguồn gen ảnh/clip qua phiên Chrome đã đăng nhập của người dùng — Google Flow, Gemini (gemini.google.com), Google AI Studio (aistudio.google.com). Agent gen (job sheets/flow/clips của `vidflow quick`) đọc đúng mục của nguồn được giao.
----
+# Nguồn gen ảnh/clip (flow / gemini / aistudio)
+
+Hướng dẫn thao tác các nguồn gen ảnh/clip qua phiên Chrome đã đăng nhập của người dùng. Agent gen (job sheets/flow/clips của `vidflow quick`) đọc đúng mục của nguồn được giao.
 
 Quy tắc chung cho mọi nguồn:
 - Dùng công cụ Claude in Chrome trên trình duyệt của người dùng; không có công cụ trình duyệt → DỪNG, báo "Cần mở phiên bằng `claude --chrome`".

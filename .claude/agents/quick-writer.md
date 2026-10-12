@@ -56,25 +56,25 @@ JSON `[{"n","prompt","verdict","score","issues"}]` → `uv run vidflow quick set
 
 ## Gen character sheet (flow-operator)
 1. `uv run vidflow quick chars -p <project> --json` → nhân vật có `image` null và `uses` > 0.
-2. Trong Flow tạo ẢNH 16:9, x1, prompt (thay <...>):
+2. Trên nguồn được giao, tạo ẢNH 16:9, x1, prompt (thay <...>):
    `A clean character reference sheet for ONE simple hand-drawn 2D doodle cartoon character, on a pure white background with a thin light-grey grid. LAYOUT: 1. full-body front 2. full-body side 3. full-body back 4. head turnaround: front / three-quarter / side 5. four expression panels 6. close-up of the signature prop. DESIGN: <desc>. Signature color: <color>. CONSISTENCY: all panels show the EXACT same character — identical head shape, face, outline weight, colors, proportions. STYLE: <câu neo đầu của bộ kênh> NEGATIVE: no text, labels, numbers or watermark, no redesign between panels.`
 3. Tải về → `uv run vidflow quick char-image -p <project> <ID> "<file>"` (+ `--channel` nếu `scope` là channel).
-Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong gen-providers.md; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.
+Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong `.claude/guides/gen-providers.md`; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.
 
 ## Gen ảnh mốc (flow-operator)
-Dùng kiến thức giao diện, tải file và điều kiện dừng trong `flow-operator.md`.
+Nguồn flow: dùng kiến thức giao diện, tải file và điều kiện dừng trong `flow-operator.md`; nguồn khác: theo mục tương ứng trong `.claude/guides/gen-providers.md`.
 1. `uv run vidflow quick beats -p <project> --json --todo` → `beats` (gen được ngay) và `blocked` (KHÔNG gen, chỉ báo). `aspect` ở đầu JSON. `beats` rỗng → báo xong.
 2. Mỗi mốc: trong ô tạo ẢNH, bấm "+" đính lần lượt TỪNG file trong `attach` (ảnh nhân vật trước, ảnh mốc trước sau cùng nếu có), rồi dán NGUYÊN VĂN `prompt`; tỉ lệ `aspect`, x1, model ảnh mặc định của gói. Làm theo lô 20 mốc, tuần tự.
 3. Tải ảnh về (~/Downloads, file mới nhất) rồi chạy ngay `uv run vidflow quick set-image -p <project> <n> "<file>" --provider <nguồn>`. Không tự đổi tên/copy vào images/.
 4. Flow từ chối prompt → `uv run vidflow quick fail -p <project> <n> --reason "<nguyên văn>"`, sang mốc sau (mốc lỗi tự rời danh sách tới khi người dùng `retry`).
-5. Hết lô → lấy lại `--todo` (mốc nối cảnh được mở khóa khi mốc trước có ảnh), làm tiếp tới khi `beats` rỗng. Captcha, hết tín dụng, giao diện khác hẳn → dừng và báo.
+5. Hết lô → lấy lại `--todo` (mốc nối cảnh được mở khóa khi mốc trước có ảnh), làm tiếp tới khi `beats` rỗng. Captcha, giao diện khác hẳn → dừng và báo; hết lượt/hết tín dụng/đòi trả phí → `uv run vidflow quick limit -p <project> --provider <nguồn> --kind image|video --reason "..."` rồi dừng và báo.
 Báo cáo: số ảnh đã gen, mốc lỗi + lý do, mốc bị chặn + lý do, tín dụng còn lại, kết quả `uv run vidflow quick status -p <project>`.
-Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong gen-providers.md; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.
+Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong `.claude/guides/gen-providers.md`; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.
 
 ## Gen clip động (flow-operator)
 1. `uv run vidflow quick beats -p <project> --json --todo-clips` → `video_model`, `resolution`, `clips` (`n`, `image`, `prompt`, `duration`).
-2. Mỗi clip, tuần tự: tạo VIDEO từ ảnh (khung đầu = file `image`), model `video_model`, tỉ lệ `aspect`, thời lượng ngắn nhất ≥ `duration`, dán NGUYÊN VĂN `prompt`, chờ xong (kiểm tra mỗi ~20 giây, tối đa 10 phút).
+2. Mỗi clip, tuần tự: tạo VIDEO từ ảnh (khung đầu = file `image`), model gần `video_model` nhất mà nguồn có, tỉ lệ `aspect`, thời lượng ngắn nhất ≥ `duration`, dán NGUYÊN VĂN `prompt`, chờ xong (kiểm tra mỗi ~20 giây, tối đa 10 phút).
 3. Tải bản `resolution` (mặc định 720p) → `uv run vidflow quick set-clip -p <project> <n> "<file .mp4>" --provider <nguồn>`.
 4. Lỗi/từ chối → `uv run vidflow quick fail -p <project> <n> --clip --reason "<nguyên văn>"`, sang clip sau.
 Báo cáo: số clip đã gen, clip lỗi + lý do, tín dụng còn lại.
-Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong gen-providers.md; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.
+Nguồn gen do lời giao việc chỉ định (flow / gemini / aistudio) — thao tác theo mục tương ứng trong `.claude/guides/gen-providers.md`; hết lượt hoặc bị đòi trả phí → quick limit ... rồi DỪNG.
