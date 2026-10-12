@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Tạo video nhanh</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#D6E1D5}
+</style>
+</helmet>
+<div style="width: 880px; height: 1000px; box-sizing: border-box; padding: 40px; background: #D6E1D5; color: #0E1238; font-family: 'Be Vietnam Pro', 'Helvetica Neue', sans-serif; font-size: 14px; display: flex; align-items: flex-start; justify-content: center">
+<form style="width: 100%; border-radius: 16px; background: #F2F6F1; box-shadow: 0 20px 50px rgba(14,18,56,.14); overflow: hidden; display: flex; flex-direction: column">
+  <div style="padding: 26px 30px 20px; border-bottom: 1px solid #CCD8CB; display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px">Video nhanh mới</h1>
+    <p style="margin: 0; color: #4A4F6E; line-height: 1.5">AI đề xuất 5 ý tưởng, viết kịch bản, tách mốc và viết prompt. Bạn duyệt ở từng bước.</p>
+  </div>
+
+  <div style="padding: 22px 30px; display: flex; flex-direction: column; gap: 22px">
+    <section style="display: flex; gap: 16px">
+      <span style="flex: none; width: 26px; height: 26px; border-radius: 50%; background: #000080; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 700">Bộ kênh và chủ đề</h2>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Bộ kênh
+          <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>Giải mã bản thân — doodle tâm lý &amp; khoa học</option></select></label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Chủ đề gợi ý · không bắt buộc
+          <input type="text" placeholder="vd: một ngày bình thường của tổ tiên 50.000 năm trước" style="font: inherit; font-weight: 500; font-size: 14px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"></label>
+      </div>
+    </section>
+
+    <section style="display: flex; gap: 16px">
+      <span style="flex: none; width: 26px; height: 26px; border-radius: 50%; background: #000080; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 700">Nhân vật của kênh dùng trong video</h2>
+        <label style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid #C9D0EA; background: #F2F4FB">
+          <input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #000080">
+          <span style="width: 34px; height: 34px; border-radius: 8px; background: #E3E9FB; display: flex; align-items: center; justify-content: center"><span style="width: 14px; height: 14px; border-radius: 50%; background: #F2F6F1; border: 2px solid #111"></span></span>
+          <span style="display: flex; flex-direction: column"><span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #1F3FA8">@MODERNYOU</span><span style="font-size: 12px; color: #4A4F6E">Người hiện đại · nhân vật dẫn dắt</span></span>
+        </label>
+        <span style="font-size: 12px; color: #4A4F6E">Nhân vật riêng của video do AI đề xuất sau bước kịch bản.</span>
+      </div>
+    </section>
+
+    <section style="display: flex; gap: 16px">
+      <span style="flex: none; width: 26px; height: 26px; border-radius: 50%; background: #000080; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">3</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 700">Google Flow</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Tỉ lệ
+            <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>16:9</option><option>9:16</option></select></label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Model ảnh
+            <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>Nano Banana 2</option></select></label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #000080">Model clip động · bắt buộc
+            <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 2px solid #000080; background: #F2F6F1; color: #0E1238"><option>— chọn —</option><option>Veo 3.1 Lite</option><option>Veo 3.1 Fast</option><option>Veo 3.1 Quality</option><option>Omni 1.1 Flash</option></select></label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Độ phân giải clip
+            <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>720p</option><option>1080p</option></select></label>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; gap: 16px">
+      <span style="flex: none; width: 26px; height: 26px; border-radius: 50%; background: #000080; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">4</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 700">Chuyển động</h2>
+        <label style="display: flex; flex-direction: column; gap: 8px">
+          <span style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #4A4F6E">Số clip động tối đa <span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #0E1238">12</span></span>
+          <input type="range" min="0" max="40" value="12" style="width: 100%; accent-color: #000080">
+          <span style="font-size: 12px; color: #4A4F6E">AI đề xuất tối đa ngần này mốc làm clip; bạn bật/tắt từng mốc trên Bảng mốc. 0 = chỉ ảnh tĩnh.</span>
+        </label>
+        <label style="display: flex; align-items: flex-start; gap: 10px; line-height: 1.5">
+          <input type="checkbox" checked style="width: 18px; height: 18px; margin-top: 2px; accent-color: #000080">
+          <span>Cho phép AI đánh dấu <strong>nối cảnh</strong> — mốc tiếp nối cùng khoảnh khắc được đính ảnh mốc trước làm tham chiếu.</span>
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <div style="margin-top: auto; padding: 16px 30px; border-top: 1px solid #CCD8CB; background: #EAF1E9; display: flex; justify-content: flex-end; gap: 10px">
+    <button type="button" style="font: inherit; font-weight: 600; min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238; cursor: pointer">Hủy</button>
+    <button type="button" style="font: inherit; font-weight: 700; min-height: 44px; padding: 0 20px; border-radius: 8px; border: none; background: #000080; color: #FFFFFF; cursor: pointer">Tạo và đề xuất ý tưởng</button>
+  </div>
+</form>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

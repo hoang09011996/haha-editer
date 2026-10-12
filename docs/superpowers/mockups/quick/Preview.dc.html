@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Xem thử và Xuất</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#E3EBE2}
+a{color:#0069ba}a:hover{color:#000080}
+</style>
+</helmet>
+<div style="min-height: 1000px; display: flex; flex-wrap: wrap; background: #E3EBE2; color: #0E1238; font-family: 'Be Vietnam Pro', 'Helvetica Neue', sans-serif; font-size: 14px">
+
+  <nav style="flex: 1 1 232px; max-width: 248px; box-sizing: border-box; padding: 20px 16px; border-right: 1px solid #CCD8CB; background: #F2F6F1; display: flex; flex-direction: column; gap: 22px" aria-label="Điều hướng">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#000080"></rect><path d="M8 9l6 10 6-10" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="21" cy="20" r="2.6" fill="#1fba00"></circle></svg>
+      <span style="font-weight: 800; font-size: 18px; letter-spacing: -0.3px">vidflow</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 10px; background: #E3EBE2">
+      <span style="font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: #5A5F7D">Giải mã bản thân</span>
+      <span style="font-weight: 700; line-height: 1.3">Ngày thường 50.000 năm trước</span>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #4A4F6E">12:31 · 188 mốc · 16:9</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <a href="Main.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 8px; color: #0E1238; text-decoration: none; font-weight: 500">Bảng mốc</a>
+      <a href="Characters.dc.html" style="display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 12px; border-radius: 8px; color: #0E1238; text-decoration: none; font-weight: 500">Nhân vật <span style="font-size: 12px; padding: 1px 7px; border-radius: 999px; background: #FDEBD2; color: #8A4B00">1 thiếu</span></a>
+      <a href="Preview.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 8px; background: #000080; color: #FFFFFF; text-decoration: none; font-weight: 600">Xem thử &amp; Xuất</a>
+    </div>
+  </nav>
+
+  <div style="flex: 999 1 640px; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start">
+    <main style="flex: 999 1 560px; min-width: 0; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.4px">Xem thử</h1>
+
+      <div style="border-radius: 14px; overflow: hidden; background: #0E1238; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+        <div style="position: relative; border-radius: 8px; overflow: hidden">
+          <svg viewBox="0 0 160 90" style="display: block; width: 100%" role="img" aria-label="Khung hình mốc 002">
+            <rect width="160" height="90" fill="#4A6BE0"></rect>
+            <rect x="18" y="52" width="92" height="22" rx="4" fill="#E9E4D6" stroke="#111" stroke-width="1.6"></rect>
+            <circle cx="40" cy="48" r="10" fill="#FFF" stroke="#111" stroke-width="1.8"></circle>
+            <circle cx="37" cy="47" r="1.3" fill="#111"></circle><path d="M41 47h3" stroke="#111" stroke-width="1.4"></path>
+            <rect x="122" y="50" width="22" height="24" fill="#8B5E3C" stroke="#111" stroke-width="1.6"></rect>
+            <circle cx="133" cy="42" r="7" fill="#FF6B5B" stroke="#111" stroke-width="1.6"></circle>
+            <path d="M110 58 L124 46" stroke="#111" stroke-width="1.8" stroke-linecap="round"></path>
+            <text x="8" y="14" font-size="9" font-weight="800" font-family="Be Vietnam Pro, sans-serif" fill="#111">THỨ HAI</text>
+          </svg>
+          <div style="position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%); max-width: 78%; padding: 6px 14px; border-radius: 6px; background: rgba(14,18,56,.82); color: #FFFFFF; font-size: 19px; font-weight: 600; text-align: center; line-height: 1.35">Bạn vùi dưới chăn, một mắt hé ra, tay mò tìm cái đồng hồ.</div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #E6E8F5">
+          <button aria-label="Mốc trước" style="font: inherit; width: 40px; height: 40px; border-radius: 8px; border: 1px solid #3A3F6B; background: transparent; color: #FFFFFF; cursor: pointer"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2L4 7l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+          <button aria-label="Phát" style="font: inherit; width: 48px; height: 40px; border-radius: 8px; border: none; background: #1fba00; color: #06210A; cursor: pointer"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="currentColor"></path></svg></button>
+          <button aria-label="Mốc sau" style="font: inherit; width: 40px; height: 40px; border-radius: 8px; border: 1px solid #3A3F6B; background: transparent; color: #FFFFFF; cursor: pointer"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 2l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">00:06.2 / 12:31.0</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #000080; color: #FFFFFF">002 · CLIP</span>
+          <span style="flex: 1"></span>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1fba00"> Phụ đề</label>
+        </div>
+      </div>
+
+      <section style="padding: 14px 16px; border-radius: 12px; background: #F2F6F1; border: 1px solid #CCD8CB; display: flex; flex-direction: column; gap: 10px" aria-label="Dòng thời gian">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 700">Dòng thời gian</h2>
+          <span style="font-size: 12px; color: #4A4F6E">bấm mốc để nhảy tới · kéo mép để đổi thời lượng</span>
+        </div>
+        <div style="display: flex; gap: 2px; font-size: 11px; font-weight: 600; color: #4A4F6E">
+          <span style="flex: 15">Buổi sáng thứ Hai</span><span style="flex: 13">Tổ tiên</span><span style="flex: 21">Nông nghiệp</span><span style="flex: 40; text-align: right">… 28 cảnh nữa</span>
+        </div>
+        <div style="position: relative; display: flex; gap: 2px; height: 44px">
+          <sc-for list="{{segs}}" as="s" hint-placeholder-count="12">
+            <span style="{{s.style}}" title="Mốc {{s.n}}"></span>
+          </sc-for>
+          <span style="flex: 40; border-radius: 4px; background: repeating-linear-gradient(90deg, #D7E1D6 0 10px, #E5EDE4 10px 12px)"></span>
+          <span style="position: absolute; left: 7%; top: -6px; bottom: -6px; width: 2px; background: #C8283E"></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 2px; height: 28px" aria-label="Sóng âm giọng đọc">
+          <sc-for list="{{wave}}" as="w" hint-placeholder-count="80">
+            <span style="{{w.style}}"></span>
+          </sc-for>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: #4A4F6E">
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #4A6BE0"></span>có ảnh (màu theo cảnh)</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 4px; background: #000080"></span>clip động</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #F4C7CF; border: 1px solid #C8283E"></span>lỗi</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #D7E1D6"></span>chưa có ảnh</span>
+        </div>
+      </section>
+    </main>
+
+    <aside style="flex: 1 1 320px; max-width: 380px; min-width: 0; box-sizing: border-box; align-self: stretch; padding: 22px 20px; border-left: 1px solid #CCD8CB; background: #F2F6F1; display: flex; flex-direction: column; gap: 18px" aria-label="Xuất video">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 800">Xuất MP4</h2>
+        <span style="font-size: 12px; color: #4A4F6E">Remotion · mặc định</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Độ phân giải
+          <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>1080p</option><option>720p</option></select></label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Chuyển cảnh
+          <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>Theo cảnh</option><option>Cắt thẳng</option><option>Mờ chéo</option></select></label>
+      </div>
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #4A4F6E">Clip dài hơn mốc
+        <select style="font: inherit; font-weight: 500; font-size: 14px; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238"><option>Cắt bớt cho vừa mốc</option><option>Tăng tốc cho vừa mốc</option></select></label>
+      <div style="display: flex; flex-direction: column; border-top: 1px solid #CCD8CB">
+        <sc-for list="{{toggles}}" as="t" hint-placeholder-count="5">
+          <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; border-bottom: 1px solid #CCD8CB">
+            <span>{{t.label}}</span>
+            <input type="checkbox" checked="{{t.on}}" style="width: 18px; height: 18px; accent-color: #000080">
+          </label>
+        </sc-for>
+      </div>
+      <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FFF8EC; color: #7A4200; font-size: 13px; line-height: 1.45">Còn 66 mốc chưa có ảnh sẽ hiện khung trống. Nên gen xong trước khi xuất bản cuối.</p>
+      <button style="font: inherit; font-weight: 700; min-height: 48px; border-radius: 8px; border: none; background: #000080; color: #FFFFFF; cursor: pointer">Xuất MP4</button>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid #CCD8CB">
+        <span style="font-weight: 700">Draft CapCut</span>
+        <span style="font-size: 13px; color: #4A4F6E; line-height: 1.45">Tùy chọn, khi cần chỉnh tay. Phải đóng CapCut trước khi dựng.</span>
+        <button style="font: inherit; font-weight: 600; min-height: 40px; border-radius: 8px; border: 1px solid #B8C7B7; background: #F2F6F1; color: #0E1238; cursor: pointer">Dựng draft CapCut</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid #CCD8CB">
+        <span style="font-weight: 700">Bản đã xuất</span>
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><span style="font-family: 'JetBrains Mono', monospace">final-v2.mp4 · 1080p</span><a href="#">Tải</a></div>
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><span style="font-family: 'JetBrains Mono', monospace">final-v1.mp4 · 720p</span><a href="#">Tải</a></div>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const segs = [
+      ['001', 4, '#4A6BE0', 'ok', 1], ['002', 4, '#4A6BE0', 'ok', 1], ['003', 3, '#4A6BE0', 'ok'], ['004', 4, '#4A6BE0', 'ok'],
+      ['005', 4, '#F0B65A', 'ok'], ['006', 5, '#F0B65A', 'gen'], ['007', 4, '#F0B65A', 'gen'],
+      ['008', 5, '#C99A6B', 'err', 1], ['009', 4, '#C99A6B', 'none'], ['010', 4, '#C99A6B', 'none'], ['011', 4, '#C99A6B', 'none'], ['012', 4, '#C99A6B', 'none', 1]
+    ].map(([n, d, c, st, clip]) => ({
+      n,
+      style: 'flex: ' + d + '; border-radius: 4px; box-sizing: border-box; ' +
+        (st === 'ok' ? 'background: ' + c : st === 'gen' ? 'background: ' + c + '; opacity: .45' : st === 'err' ? 'background: #F4C7CF; border: 1px solid #C8283E' : 'background: #D7E1D6') +
+        (clip ? '; border-bottom: 5px solid #000080' : '')
+    }));
+    const wave = [];
+    for (let i = 0; i < 100; i++) {
+      const h = 4 + Math.abs(Math.sin(i * 0.7) * 10 + Math.sin(i * 0.23) * 8) % 22;
+      wave.push({ style: 'flex: 1; height: ' + h.toFixed(1) + 'px; border-radius: 1px; background: #1fba00; opacity: .75' });
+    }
+    const toggles = [
+      ['Zoom chậm trên ảnh tĩnh', true], ['Phụ đề theo giọng', true], ['Logo kênh', true],
+      ['Âm thanh trong clip Veo', false], ['Nhạc nền', false]
+    ].map(([label, on]) => ({ label, on }));
+    return { segs, wave, toggles };
+  }
+}
+</script>
+</body>
+</html>
