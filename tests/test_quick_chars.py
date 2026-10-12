@@ -47,7 +47,6 @@ def test_set_chars_validation(qroot):
         chars.set_chars(qroot, [{"id": "farmer", "desc": "x"}])
 
 
-@pytest.mark.skip(reason="Task 4")
 def test_set_chars_refuses_removing_char_in_use(qroot, P):
     chars.set_chars(qroot, [FARMER])
     ops.set_prompts(qroot, [{"n": 1, "prompt": P("@FARMER digging"), "verdict": "pass", "score": 8}])
@@ -81,7 +80,6 @@ def test_promote_moves_char_and_image(qroot, img, quick_presets):
     assert chars.lookup(qroot)["FARMER"].scope == "channel"
 
 
-@pytest.mark.skip(reason="Task 4")
 def test_char_rows_counts_uses_and_blocked(qroot, P):
     chars.set_chars(qroot, [FARMER])
     ops.set_prompts(qroot, [{"n": 1, "prompt": P("@FARMER digging"), "verdict": "pass", "score": 8},

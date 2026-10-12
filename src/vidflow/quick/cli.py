@@ -18,6 +18,7 @@ quick_app = typer.Typer(no_args_is_help=True, help="Quy trình nhanh: ý tưởn
 preset_app = typer.Typer(no_args_is_help=True, help="Bộ kênh (brief + câu neo + giọng)")
 
 ProjectOpt = Annotated[Path, typer.Option("--project", "-p", help="Thư mục project nhanh")]
+ClipOpt = Annotated[bool, typer.Option("--clip", help="Áp dụng cho prompt/clip động thay vì ảnh")]
 ConfigOpt = Annotated[Optional[Path], typer.Option("--config", help="Đường dẫn vidflow.toml")]
 JsonFile = Annotated[Path, typer.Option("--json", help="File JSON đầu vào")]
 PrintOpt = Annotated[bool, typer.Option("--print", help="Chỉ in lệnh giao cho Claude, không chạy")]
@@ -124,10 +125,11 @@ def voice(project: ProjectOpt, config: ConfigOpt = None):
 
 
 @_cmd(quick_app, "redo")
-def redo(project: ProjectOpt, n: Annotated[list[int], typer.Argument(help="Các mốc cần gen lại")]):
-    """Đánh dấu mốc cần gen lại ảnh."""
-    ops.mark_redo(project, n)
-    typer.echo(f"Đã đánh dấu gen lại: {', '.join(map(str, n))}")
+def redo(project: ProjectOpt, n: Annotated[list[int], typer.Argument(help="Các mốc cần gen lại")],
+         clip: Annotated[bool, typer.Option("--clip", help="Gen lại clip thay vì ảnh")] = False):
+    """Đánh dấu mốc cần gen lại ảnh (hoặc clip)."""
+    ops.mark_redo(project, n, clip=clip)
+    typer.echo(f"Đã đánh dấu gen lại {'clip' if clip else 'ảnh'}: {', '.join(map(str, n))}")
 
 
 @_cmd(quick_app, "status")
@@ -218,9 +220,10 @@ def set_prompt(project: ProjectOpt, n: Annotated[int, typer.Argument()],
                prompt: Annotated[str, typer.Option(help="Prompt đầy đủ (có câu neo)")],
                verdict: Annotated[str, typer.Option(help="pass | fail")] = "pass",
                score: Annotated[float, typer.Option(help="Điểm 0–10")] = 0,
-               issue: Annotated[Optional[list[str]], typer.Option("--issue", help="Vấn đề (lặp được)")] = None):
+               issue: Annotated[Optional[list[str]], typer.Option("--issue", help="Vấn đề (lặp được)")] = None,
+               cont: Annotated[Optional[bool], typer.Option("--cont/--no-cont", help="Nối cảnh với mốc trước")] = None):
     """Ghi prompt + kết quả tự kiểm duyệt cho một mốc."""
-    ops.set_prompt(project, n, prompt, verdict=verdict, score=score, issues=issue or [])
+    ops.set_prompt(project, n, prompt, verdict=verdict, score=score, issues=issue or [], cont=cont)
     typer.echo(f"Mốc {n}: {verdict} ({score:g}/10)")
 
 
@@ -230,6 +233,41 @@ def set_prompts(project: ProjectOpt, json_file: JsonFile):
     items = _read_json(json_file)
     ops.set_prompts(project, items)
     typer.echo(f"Đã ghi {len(items)} prompt")
+
+
+@_cmd(quick_app, "edit-prompt")
+def edit_prompt(project: ProjectOpt, n: Annotated[int, typer.Argument()],
+                prompt: Annotated[str, typer.Option(help="Prompt mới")], clip: ClipOpt = False):
+    """Sửa tay prompt một mốc (xóa kết quả kiểm duyệt cũ)."""
+    ops.edit_prompt(project, n, prompt, clip=clip)
+    typer.echo(f"Mốc {n}: đã lưu prompt {'clip' if clip else 'ảnh'} — cần kiểm duyệt lại")
+
+
+@_cmd(quick_app, "set-review")
+def set_review(project: ProjectOpt, n: Annotated[int, typer.Argument()],
+               verdict: Annotated[str, typer.Option(help="pass | fail | override")],
+               score: Annotated[float, typer.Option(help="Điểm 0–10")] = 0,
+               issue: Annotated[Optional[list[str]], typer.Option("--issue", help="Vấn đề/gợi ý (lặp được)")] = None,
+               clip: ClipOpt = False):
+    """Ghi kết quả kiểm duyệt một mốc."""
+    ops.set_review(project, n, verdict, score=score, issues=issue or [], clip=clip)
+    typer.echo(f"Mốc {n} ({'clip' if clip else 'ảnh'}): {verdict} ({score:g}/10)")
+
+
+@_cmd(quick_app, "fail")
+def fail_cmd(project: ProjectOpt, n: Annotated[int, typer.Argument()],
+             reason: Annotated[str, typer.Option(help="Nguyên văn thông báo lỗi của Flow")], clip: ClipOpt = False):
+    """Ghi lỗi Flow cho ảnh/clip của mốc (mốc rời danh sách việc tới khi retry)."""
+    ops.record_fail(project, n, reason, clip=clip)
+    typer.echo(f"Mốc {n}: ghi lỗi {'clip' if clip else 'ảnh'}")
+
+
+@_cmd(quick_app, "retry")
+def retry(project: ProjectOpt, n: Annotated[Optional[list[int]], typer.Argument(help="Mốc (trống = mọi mốc lỗi)")] = None,
+          clip: ClipOpt = False):
+    """Xóa lỗi để mốc được gen lại."""
+    count = ops.clear_errors(project, n or None, clip=clip)
+    typer.echo(f"Đã đưa lại {count} mốc lỗi vào danh sách gen")
 
 
 @_cmd(quick_app, "set-image")

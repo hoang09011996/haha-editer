@@ -6,6 +6,7 @@ from pathlib import Path
 
 from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
+from vidflow.quick.chars import check_known, lookup, parse_refs
 from vidflow.quick.model import (IMAGE_EXTS, STAGES, Beat, Beats, Idea, QuickProject, Review, image_name,
                                  load_beats, load_quick, require_beats, save_beats, save_quick)
 from vidflow.quick.preset import Preset, load_preset
@@ -71,19 +72,33 @@ def check_anchors(prompt: str, preset: Preset) -> None:
                            f"(nguyên văn): «{preset.style_anchor_start}» … «{preset.style_anchor_end}»")
 
 
+def _check_cont(beat: Beat, cont: bool, q: QuickProject) -> bool:
+    if cont and beat.n == 1:
+        raise VidflowError("Mốc 1 không nối cảnh được (không có mốc trước).")
+    if cont and not q.allow_cont:
+        raise VidflowError("Video này tắt nối cảnh (allow_cont=false) — bật bằng `vidflow quick settings --allow-cont`.")
+    return cont
+
+
 def set_prompts(root: Path, items: list[dict]) -> Beats:
-    """items: [{n, prompt, verdict, score, issues?}] — ghi prompt + kết quả tự kiểm duyệt."""
+    """items: [{n, prompt, verdict, score, issues?, cont?}] — ghi prompt + kết quả tự kiểm duyệt.
+    `refs` tự tách từ @TÊN trong prompt; tên chưa khai báo → từ chối cả lô."""
     q = load_quick(root)
     preset = load_preset(q.preset)
     beats = require_beats(root)
+    known = lookup(root, q, preset)
     for it in items:
         beat = beats.get(int(it["n"]))
         prompt = str(it.get("prompt", "")).strip()
         check_anchors(prompt, preset)
+        refs = parse_refs(prompt)
+        check_known(refs, known)
         verdict = it.get("verdict", "pass")
         if verdict not in ("pass", "fail"):
             raise VidflowError("verdict phải là pass hoặc fail")
-        beat.prompt = prompt
+        if "cont" in it:
+            beat.cont = _check_cont(beat, bool(it["cont"]), q)
+        beat.prompt, beat.refs = prompt, refs
         beat.review = Review(verdict=verdict, score=float(it.get("score", 0)), issues=list(it.get("issues") or []))
     save_beats(root, beats)
     if all(b.review and b.review.verdict in PASSING for b in beats.beats):
@@ -92,9 +107,82 @@ def set_prompts(root: Path, items: list[dict]) -> Beats:
 
 
 def set_prompt(root: Path, n: int, prompt: str, *, verdict: str = "pass", score: float = 0,
-               issues: list[str] | None = None) -> Beat:
-    return set_prompts(root, [{"n": n, "prompt": prompt, "verdict": verdict, "score": score,
-                               "issues": issues or []}]).get(n)
+               issues: list[str] | None = None, cont: bool | None = None) -> Beat:
+    item = {"n": n, "prompt": prompt, "verdict": verdict, "score": score, "issues": issues or []}
+    if cont is not None:
+        item["cont"] = cont
+    return set_prompts(root, [item]).get(n)
+
+
+def edit_prompt(root: Path, n: int, prompt: str, *, clip: bool = False) -> Beat:
+    """Người dùng sửa tay prompt ảnh/clip: lưu và xóa kết quả kiểm duyệt (phải kiểm duyệt lại mới gen)."""
+    q = load_quick(root)
+    preset = load_preset(q.preset)
+    beats = require_beats(root)
+    beat = beats.get(n)
+    prompt = prompt.strip()
+    if not prompt:
+        raise VidflowError("Prompt rỗng.")
+    refs = parse_refs(prompt)
+    check_known(refs, lookup(root, q, preset))
+    if clip:
+        beat.clip.prompt, beat.clip.review = prompt, None
+    else:
+        check_anchors(prompt, preset)
+        beat.prompt, beat.refs, beat.review = prompt, refs, None
+    save_beats(root, beats)
+    return beat
+
+
+def set_review(root: Path, n: int, verdict: str, *, score: float = 0, issues: list[str] | None = None,
+               clip: bool = False) -> Beat:
+    """Ghi kết quả kiểm duyệt một mốc (prompt-reviewer, hoặc người dùng duyệt tay = override)."""
+    if verdict not in ("pass", "fail", "override"):
+        raise VidflowError("verdict phải là pass, fail hoặc override")
+    beats = require_beats(root)
+    beat = beats.get(n)
+    if not (beat.clip.prompt if clip else beat.prompt):
+        raise VidflowError(f"Mốc {n} chưa có prompt {'clip' if clip else 'ảnh'} để kiểm duyệt.")
+    review = Review(verdict=verdict, score=float(score), issues=list(issues or []))
+    if clip:
+        beat.clip.review = review
+    else:
+        beat.review = review
+    save_beats(root, beats)
+    if not clip and all(b.review and b.review.verdict in PASSING for b in beats.beats):
+        advance(root, "prompted")
+    return beat
+
+
+def record_fail(root: Path, n: int, reason: str, *, clip: bool = False) -> Beat:
+    """Flow từ chối/lỗi: ghi lý do. Mốc lỗi bị loại khỏi danh sách việc tới khi `clear_errors`."""
+    reason = reason.strip()
+    if not reason:
+        raise VidflowError("Cần ghi lý do lỗi (nguyên văn thông báo của Flow).")
+    beats = require_beats(root)
+    beat = beats.get(n)
+    if clip:
+        beat.clip.status, beat.clip.error = "error", reason
+    else:
+        beat.error = reason
+    save_beats(root, beats)
+    return beat
+
+
+def clear_errors(root: Path, ns: list[int] | None = None, *, clip: bool = False) -> int:
+    """Đưa mốc lỗi trở lại danh sách việc. ns rỗng/None = mọi mốc lỗi. Trả số mốc đã xóa lỗi."""
+    beats = require_beats(root)
+    targets = [beats.get(n) for n in ns] if ns else beats.beats
+    count = 0
+    for b in targets:
+        if clip and b.clip.status == "error":
+            b.clip.status, b.clip.error = "redo", ""
+            count += 1
+        elif not clip and b.error:
+            b.error = ""
+            count += 1
+    save_beats(root, beats)
+    return count
 
 
 def set_image(root: Path, n: int, src: Path) -> Beat:
@@ -115,18 +203,25 @@ def set_image(root: Path, n: int, src: Path) -> Beat:
         shutil.copyfile(src, dest)
     if beat.image and beat.image != rel and beat.image.startswith("images/"):
         (root / beat.image).unlink(missing_ok=True)
-    beat.image, beat.status = rel, "ok"
+    beat.image, beat.status, beat.error = rel, "ok", ""
+    if beat.clip.status == "ok":
+        beat.clip.status = "redo"  # clip cũ dựng từ ảnh cũ
     save_beats(root, beats)
     if all(b.status == "ok" and b.image for b in beats.beats):
         advance(root, "imaged")
     return beat
 
 
-def mark_redo(root: Path, ns: list[int]) -> Beats:
+def mark_redo(root: Path, ns: list[int], *, clip: bool = False) -> Beats:
     beats = require_beats(root)
     targets = [beats.get(n) for n in ns]  # báo lỗi trước khi ghi nếu có số sai
     for b in targets:
-        b.status = "redo"
+        if clip:
+            if not b.clip.enabled:
+                raise VidflowError(f"Mốc {b.n} chưa bật clip.")
+            b.clip.status = "redo"
+        else:
+            b.status = "redo"
     save_beats(root, beats)
     return beats
 
