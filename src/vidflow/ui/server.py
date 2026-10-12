@@ -18,10 +18,11 @@ from vidflow.schema import FlowSettings, Script
 from vidflow.status import scene_rows
 from vidflow.ui.auth import Auth
 from vidflow.ui.jobs import KINDS, JobRunner
+from vidflow.ui.quick_api import quick_router
 from vidflow.ui.suggest import Suggester
 
 STATIC = Path(__file__).parent / "static"
-MEDIA_DIRS = ("audio", "clips", "refs", "music", "inbox", "frames")
+MEDIA_DIRS = ("audio", "clips", "refs", "music", "inbox", "frames", "images", "out")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 
 
@@ -94,6 +95,7 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
         return (STATIC / "index.html").read_text(encoding="utf-8")
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    app.include_router(quick_router(projects_root, runner))
 
     @app.get("/api/projects")
     def list_projects():
@@ -226,9 +228,12 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
 
     @app.get("/media/{name}/{path:path}")
     def media(name: str, path: str):
-        p = open_project(name)
-        target = (p.root / path).resolve()
-        allowed = [(p.root / d).resolve() for d in MEDIA_DIRS]
+        root = projects_root / name
+        if not NAME_RE.match(name) or not ((root / "script.yaml").is_file() or (root / "quick.yaml").is_file()):
+            raise HTTPException(404, "Không có file")
+        root = root.resolve()
+        target = (root / path).resolve()
+        allowed = [(root / d).resolve() for d in MEDIA_DIRS]
         if not any(d in target.parents for d in allowed) or not target.is_file():
             raise HTTPException(404, "Không có file")
         return FileResponse(target)
