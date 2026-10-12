@@ -70,3 +70,48 @@ def test_cli_provider_commands(qroot, P, img):
     assert s["limits"][0]["reason"] == "cần trả phí"
     r = runner.invoke(app, ["quick", "limit", "-p", str(qroot), "--provider", "x", "--kind", "image"])
     assert r.exit_code == 1 and "Traceback" not in r.output
+
+
+import vidflow.quick.jobs as jobs_mod
+
+
+def _ready_for_flow(qroot, P):
+    ops.set_prompts(qroot, [{"n": i, "prompt": P("x"), "verdict": "pass", "score": 8} for i in range(1, 5)])
+
+
+def test_job_uses_settings_provider_and_override(qroot, P, monkeypatch):
+    _ready_for_flow(qroot, P)
+    calls = []
+    monkeypatch.setattr(jobs_mod, "run_claude", lambda kind, root, preset, **kw: calls.append((kind, kw.get("provider"))) or 0)
+    ops.update_settings(qroot, image_provider="gemini")
+    assert runner.invoke(app, ["quick", "flow", "-p", str(qroot)]).exit_code == 0
+    assert runner.invoke(app, ["quick", "sheets", "-p", str(qroot), "--provider", "aistudio"]).exit_code == 0
+    assert calls == [("flow", "gemini"), ("sheets", "aistudio")]
+    r = runner.invoke(app, ["quick", "flow", "-p", str(qroot), "--provider", "gemeni"])
+    assert r.exit_code == 1 and len(calls) == 2
+
+
+def test_job_exits_3_when_agent_records_limit(qroot, P, monkeypatch):
+    _ready_for_flow(qroot, P)
+    ops.record_limit(qroot, "flow", "video")  # cũ, nguồn khác loại — vẫn bị xóa vì cùng nguồn flow
+    ops.record_limit(qroot, "gemini", "image")  # nguồn khác — giữ nguyên
+
+    def fake_run(kind, root, preset, **kw):
+        ops.record_limit(root, kw["provider"], "image", reason="đã dùng hết")
+        return 0
+
+    monkeypatch.setattr(jobs_mod, "run_claude", fake_run)
+    r = runner.invoke(app, ["quick", "flow", "-p", str(qroot)])
+    assert r.exit_code == 3
+    assert "Hết lượt" in r.output and "flow" in r.output
+    hits = [(x.provider, x.kind) for x in load_quick(qroot).limits]
+    assert hits == [("gemini", "image"), ("flow", "image")]
+
+
+def test_print_does_not_clear_limits_or_run(qroot, P, monkeypatch):
+    _ready_for_flow(qroot, P)
+    ops.record_limit(qroot, "flow", "image")
+    monkeypatch.setattr(jobs_mod, "run_claude", lambda *a, **kw: pytest.fail("không được chạy"))
+    r = runner.invoke(app, ["quick", "flow", "-p", str(qroot), "--print", "--provider", "gemini"])
+    assert r.exit_code == 0 and "Gemini" in r.output
+    assert len(load_quick(qroot).limits) == 1

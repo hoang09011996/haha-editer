@@ -97,3 +97,30 @@ def test_review_task_and_cmd(preset):
 def test_unknown_kind(preset):
     with pytest.raises(ValueError):
         claude_task("video", ROOT, preset)
+
+
+from vidflow.quick.jobs import PROVIDER_LABELS
+
+
+@pytest.mark.parametrize("kind", ["sheets", "flow", "clips"])
+@pytest.mark.parametrize("provider", ["flow", "gemini", "aistudio"])
+def test_gen_tasks_follow_provider(kind, provider, preset):
+    t = claude_task(kind, ROOT, preset, provider=provider)
+    assert "gen-providers.md" in t and PROVIDER_LABELS[provider] in t
+    assert f"--provider {provider}" in t
+    assert "quick limit" in t and "DỪNG" in t
+    assert "trả phí" in t
+    other = [p for p in PROVIDER_LABELS if p != provider]
+    for p in other:
+        assert PROVIDER_LABELS[p] not in t
+    cmd = claude_cmd(kind, ROOT, preset, provider=provider)
+    assert "--chrome" in cmd and cmd[-1] == t
+
+
+def test_flow_default_still_mentions_flow_operator(preset):
+    assert "flow-operator.md" in claude_task("flow", ROOT, preset)
+
+
+def test_unknown_provider_rejected(preset):
+    with pytest.raises(ValueError):
+        claude_task("flow", ROOT, preset, provider="midjourney")

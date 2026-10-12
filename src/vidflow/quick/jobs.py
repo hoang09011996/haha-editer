@@ -10,14 +10,20 @@ from vidflow.quick.preset import REPO, Preset, brief_path
 AGENTS = REPO / ".claude" / "agents"
 QUICK_KINDS = ("ideas", "script", "prompts", "sheets", "flow", "clips")
 CHROME_KINDS = ("sheets", "flow", "clips")
+PROVIDER_LABELS = {
+    "flow": "Google Flow",
+    "gemini": "Gemini (gemini.google.com)",
+    "aistudio": "Google AI Studio (aistudio.google.com)",
+}
+GEN_KINDS = ("sheets", "flow", "clips")
 BATCH = 20
 LABELS = {
     "ideas": "Claude đề xuất 5 ý tưởng",
     "script": "Claude viết kịch bản + tách mốc + đề xuất nhân vật",
     "prompts": "Claude viết prompt ảnh + clip từng mốc",
-    "sheets": "Gen character sheet trong Google Flow",
-    "flow": "Gen ảnh mốc trong Google Flow",
-    "clips": "Gen clip động trong Google Flow",
+    "sheets": "Gen character sheet",
+    "flow": "Gen ảnh mốc",
+    "clips": "Gen clip động",
 }
 CLI = "uv run vidflow quick"
 
@@ -28,11 +34,33 @@ def _common(root: Path, preset: Preset) -> str:
             f"Bộ kênh: {preset.id} — brief gốc: {brief} (đọc TOÀN BỘ, tuân thủ nội dung/giọng/phong cách; "
             "BỎ QUA các chỉ dẫn tương tác trong brief như chờ người dùng trả lời, xuất code block, tạo file tải về). "
             f"Xem trạng thái: `{CLI} status -p {root}`. KHÔNG sửa tay quick.yaml, beats.json — mọi ghi đều qua CLI "
-            f"`{CLI} ...`; file JSON tạm đặt trong {root}/tmp/. Người dùng chỉ dùng tín dụng gói Google Flow: KHÔNG chạy "
-            "`vidflow gen`, `vidflow estimate`, `vidflow refimg`. Báo cáo bằng tiếng Việt, ngắn gọn.")
+            f"`{CLI} ...`; file JSON tạm đặt trong {root}/tmp/. Người dùng chỉ dùng gói Google AI qua phiên đăng nhập "
+            "(không API trả phí): KHÔNG chạy `vidflow gen`, `vidflow estimate`, `vidflow refimg`. Báo cáo bằng tiếng Việt, ngắn gọn.")
 
 
-def claude_task(kind: str, project_root: Path, preset: Preset) -> str:
+def provider_for(kind: str, q) -> str:
+    """Nguồn mặc định cho job gen theo cài đặt video (q: QuickProject)."""
+    return q.flow.video_provider if kind == "clips" else q.flow.image_provider
+
+
+def _operator(provider: str, section: str, writer: Path) -> str:
+    """Câu mở đầu cho agent thao tác trình duyệt theo nguồn."""
+    if provider not in PROVIDER_LABELS:
+        raise ValueError(f"Nguồn gen không hỗ trợ: {provider}")
+    label = PROVIDER_LABELS[provider]
+    extra = (f" và {AGENTS / 'flow-operator.md'} (kiến thức giao diện Flow, tải file, điều kiện dừng)"
+             if provider == "flow" else "")
+    return (f"Bạn là operator gen trên {label}, dùng phiên Chrome đã đăng nhập của người dùng. Đọc và tuân thủ mục "
+            f"'{provider}' trong {AGENTS / 'gen-providers.md'}{extra}, và mục '{section}' trong {writer}.")
+
+
+def _limit_rule(cli: str, root: Path, provider: str, kind: str) -> str:
+    return (f"Hết lượt/hết tín dụng ở {PROVIDER_LABELS[provider]}, hoặc giao diện đòi bật thanh toán / nhập thẻ / "
+            f"API key trả phí / báo phí → KHÔNG bấm tiếp, chạy `{cli} limit -p {root} --provider {provider} "
+            f"--kind {kind} --reason \"<nguyên văn>\"` rồi DỪNG và báo cáo.")
+
+
+def claude_task(kind: str, project_root: Path, preset: Preset, provider: str = "flow") -> str:
     root = project_root
     cli = CLI
     writer = AGENTS / "quick-writer.md"
@@ -66,43 +94,50 @@ def claude_task(kind: str, project_root: Path, preset: Preset) -> str:
                 "hoặc đã đủ clip bật), viết prompt clip theo mục 'Clip động' trong quick-writer.md, tự kiểm duyệt, "
                 f"ghi `[{{\"n\", \"prompt\", \"verdict\", \"score\", \"issues\"}}]` bằng `{cli} set-clip-prompts -p {root} --json <file>`.")
     if kind == "flow":
-        return (f"Bạn là flow-operator. Đọc và tuân thủ {AGENTS / 'flow-operator.md'} (kiến thức giao diện Flow, tải file, "
-                f"điều kiện dừng) và phần 'Gen ảnh mốc' trong {writer}. {common} "
+        label = PROVIDER_LABELS.get(provider, provider)
+        return (f"{_operator(provider, 'Gen ảnh mốc', writer)} {common} "
                 f"Lấy việc bằng `{cli} beats -p {root} --json --todo` (mốc gen được ngay; trường `file` là tên đích "
                 "NNN_MM-SS; `attach` là các ảnh phải đính kèm theo đúng thứ tự trước khi dán prompt; `blocked` là mốc "
-                f"chưa gen được — KHÔNG gen, chỉ báo). Gen ẢNH (không phải video) trong Google Flow, tỉ lệ {preset.aspect}, "
-                f"x1 mỗi mốc, prompt nguyên văn `prompt`, theo lô {BATCH} mốc. Tải từng ảnh (1K/2K) về rồi chạy ngay "
-                f"`{cli} set-image -p {root} <n> \"<file tải về>\"` — lệnh tự lưu thành images/NNN_MM-SS.jpg và cập nhật "
-                f"beats.json. Flow từ chối prompt → `{cli} fail -p {root} <n> --reason \"<nguyên văn>\"` rồi sang mốc sau. "
+                f"chưa gen được — KHÔNG gen, chỉ báo). Gen ẢNH (không phải video) trên {label}, tỉ lệ {preset.aspect}, "
+                f"x1 mỗi mốc, prompt nguyên văn `prompt`, theo lô {BATCH} mốc. Tải từng ảnh về rồi chạy ngay "
+                f"`{cli} set-image -p {root} <n> \"<file tải về>\" --provider {provider}` — lệnh tự lưu thành "
+                "images/NNN_MM-SS.jpg và cập nhật beats.json. Dịch vụ từ chối prompt → "
+                f"`{cli} fail -p {root} <n> --reason \"<nguyên văn>\"` rồi sang mốc sau. "
+                f"{_limit_rule(cli, root, provider, 'image')} "
                 f"Hết lô thì chạy lại `{cli} beats -p {root} --json --todo` và làm lô tiếp cho tới khi `beats` rỗng. "
-                "Báo cáo: số ảnh đã gen, mốc lỗi kèm lý do, mốc bị chặn kèm lý do, tín dụng còn lại.")
+                "Báo cáo: số ảnh đã gen, mốc lỗi kèm lý do, mốc bị chặn kèm lý do, lượt/tín dụng còn lại nếu thấy.")
     if kind == "sheets":
-        return (f"Bạn là flow-operator. Đọc và tuân thủ {AGENTS / 'flow-operator.md'} và mục 'Gen character sheet' "
-                f"trong {writer}. {common} Lấy nhân vật bằng `{cli} chars -p {root} --json`; với mỗi nhân vật có "
-                "`image` null và `uses` > 0: gen MỘT ảnh character sheet trong Flow (tỉ lệ 16:9, x1) theo mẫu prompt "
-                f"trong mục đó, tải về rồi chạy `{cli} char-image -p {root} <ID> \"<file>\"` (thêm `--channel` khi "
-                "`scope` là channel). Báo cáo: nhân vật đã gen, nhân vật lỗi kèm lý do, tín dụng còn lại.")
+        label = PROVIDER_LABELS.get(provider, provider)
+        return (f"{_operator(provider, 'Gen character sheet', writer)} {common} Lấy nhân vật bằng "
+                f"`{cli} chars -p {root} --json`; với mỗi nhân vật có `image` null và `uses` > 0: gen MỘT ảnh "
+                f"character sheet trên {label} (tỉ lệ 16:9, x1) theo mẫu prompt trong mục đó, tải về rồi chạy "
+                f"`{cli} char-image -p {root} <ID> \"<file>\"` (thêm `--channel` khi `scope` là channel; nguồn: "
+                f"--provider {provider} chỉ để ghi nhận trong báo cáo). {_limit_rule(cli, root, provider, 'image')} "
+                "Báo cáo: nhân vật đã gen, nhân vật lỗi kèm lý do, lượt/tín dụng còn lại nếu thấy.")
     if kind == "clips":
-        return (f"Bạn là flow-operator. Đọc và tuân thủ {AGENTS / 'flow-operator.md'} và mục 'Gen clip động' trong "
-                f"{writer}. {common} Lấy việc bằng `{cli} beats -p {root} --json --todo-clips` (model, độ phân giải, "
-                "và từng clip: ảnh nguồn `image`, `prompt`, `duration`). Mỗi clip: tạo VIDEO từ ảnh trong Flow, đính `image` "
-                "làm khung đầu, chọn đúng `video_model`, thời lượng ngắn nhất ≥ `duration`, dán `prompt` nguyên văn, "
-                f"tải bản `resolution` về rồi chạy `{cli} set-clip -p {root} <n> \"<file>\"`. Từ chối/lỗi → "
-                f"`{cli} fail -p {root} <n> --clip --reason \"<nguyên văn>\"`. Tuần tự từng clip. "
-                "Báo cáo: số clip đã gen, clip lỗi kèm lý do, tín dụng còn lại.")
+        label = PROVIDER_LABELS.get(provider, provider)
+        return (f"{_operator(provider, 'Gen clip động', writer)} {common} Lấy việc bằng "
+                f"`{cli} beats -p {root} --json --todo-clips` (model, độ phân giải, và từng clip: ảnh nguồn `image`, "
+                f"`prompt`, `duration`). Mỗi clip: tạo VIDEO từ ảnh trên {label}, đính `image` làm khung đầu, chọn "
+                "model gần `video_model` nhất mà nguồn này có, thời lượng ngắn nhất ≥ `duration` (không có thì dài nhất), "
+                "dán `prompt` nguyên văn, tải bản `resolution` (hoặc gần nhất) về rồi chạy "
+                f"`{cli} set-clip -p {root} <n> \"<file>\" --provider {provider}`. Từ chối/lỗi → "
+                f"`{cli} fail -p {root} <n> --clip --reason \"<nguyên văn>\"`. "
+                f"{_limit_rule(cli, root, provider, 'video')} Tuần tự từng clip. "
+                "Báo cáo: số clip đã gen, clip lỗi kèm lý do, lượt/tín dụng còn lại nếu thấy.")
     raise ValueError(f"Không hỗ trợ việc '{kind}'")
 
 
-def claude_cmd(kind: str, project_root: Path, preset: Preset) -> list[str]:
+def claude_cmd(kind: str, project_root: Path, preset: Preset, provider: str = "flow") -> list[str]:
     cmd = ["claude", "-p", "--permission-mode", "bypassPermissions"]
     if kind in CHROME_KINDS:
         cmd.append("--chrome")
-    return cmd + [claude_task(kind, project_root, preset)]
+    return cmd + [claude_task(kind, project_root, preset, provider)]
 
 
-def run_claude(kind: str, project_root: Path, preset: Preset, *, log: IO | None = None) -> int:
+def run_claude(kind: str, project_root: Path, preset: Preset, *, provider: str = "flow", log: IO | None = None) -> int:
     """Chạy job Claude đồng bộ (CLI). UI nên dùng `claude_cmd` với JobRunner riêng."""
-    r = subprocess.run(claude_cmd(kind, project_root, preset), cwd=REPO, stdin=subprocess.DEVNULL,
+    r = subprocess.run(claude_cmd(kind, project_root, preset, provider), cwd=REPO, stdin=subprocess.DEVNULL,
                        stdout=log, stderr=subprocess.STDOUT if log else None)
     return r.returncode
 

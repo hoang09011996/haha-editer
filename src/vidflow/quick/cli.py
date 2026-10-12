@@ -20,6 +20,7 @@ preset_app = typer.Typer(no_args_is_help=True, help="Bộ kênh (brief + câu ne
 ProjectOpt = Annotated[Path, typer.Option("--project", "-p", help="Thư mục project nhanh")]
 ClipOpt = Annotated[bool, typer.Option("--clip", help="Áp dụng cho prompt/clip động thay vì ảnh")]
 ProviderOpt = Annotated[Optional[str], typer.Option("--provider", help="Nguồn gen: flow | gemini | aistudio")]
+LIMIT_EXIT = 3  # job gen dừng vì hết lượt/bị đòi trả phí ở nguồn
 ConfigOpt = Annotated[Optional[Path], typer.Option("--config", help="Đường dẫn vidflow.toml")]
 JsonFile = Annotated[Path, typer.Option("--json", help="File JSON đầu vào")]
 PrintOpt = Annotated[bool, typer.Option("--print", help="Chỉ in lệnh giao cho Claude, không chạy")]
@@ -67,7 +68,7 @@ def new(name: Annotated[str, typer.Argument(help="Tên project (tạo trong proj
     typer.echo(f"Đã tạo {root}/quick.yaml (bộ kênh {preset})")
 
 
-def _claude(kind: str, project: Path, print_only: bool):
+def _claude(kind: str, project: Path, print_only: bool, provider: str | None = None):
     q = load_quick(project)
     if kind == "script" and not q.picked_idea():
         raise VidflowError("Chưa chọn ý tưởng — `vidflow quick pick -p ... <n>`.")
@@ -76,11 +77,22 @@ def _claude(kind: str, project: Path, print_only: bool):
     if kind == "clips" and not q.flow.video_model:
         raise VidflowError("Chưa chọn model clip — `vidflow quick settings -p <project> --video-model \"Veo 3.1 Lite\"`.")
     preset = load_preset(q.preset)
+    prov = ops.check_provider(provider) if provider else (jobs.provider_for(kind, q) if kind in jobs.GEN_KINDS else "flow")
     if print_only:
-        typer.echo(jobs.claude_task(kind, project, preset))
+        typer.echo(jobs.claude_task(kind, project, preset, prov))
         return
-    typer.echo(f"{jobs.LABELS[kind]}…")
-    rc = jobs.run_claude(kind, project, preset)
+    if kind in jobs.GEN_KINDS:
+        ops.clear_limits(project, prov)
+    typer.echo(f"{jobs.LABELS[kind]} ({jobs.PROVIDER_LABELS[prov]})…" if kind in jobs.GEN_KINDS else f"{jobs.LABELS[kind]}…")
+    rc = jobs.run_claude(kind, project, preset, provider=prov)
+    hits = [x for x in load_quick(project).limits if x.provider == prov] if kind in jobs.GEN_KINDS else []
+    if hits:
+        h = hits[-1]
+        typer.secho(f"Hết lượt {'ảnh' if h.kind == 'image' else 'clip'} ở {prov}"
+                    + (f": {h.reason}" if h.reason else "")
+                    + " — đổi nguồn bằng `vidflow quick settings -p <project> --image-provider/--video-provider ...` "
+                      "hoặc chạy lại với `--provider ...`.", fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(LIMIT_EXIT)
     if rc:
         raise VidflowError(f"Job Claude '{kind}' lỗi (mã {rc}).")
     typer.echo(ops.format_status(ops.status_summary(project)))
@@ -105,21 +117,21 @@ def prompts(project: ProjectOpt, print_only: PrintOpt = False):
 
 
 @_cmd(quick_app, "flow")
-def flow(project: ProjectOpt, print_only: PrintOpt = False):
-    """Gen ảnh mốc pending/redo trong Google Flow (claude --chrome)."""
-    _claude("flow", project, print_only)
+def flow(project: ProjectOpt, print_only: PrintOpt = False, provider: ProviderOpt = None):
+    """Gen ảnh mốc pending/redo (nguồn theo cài đặt hoặc --provider; claude --chrome)."""
+    _claude("flow", project, print_only, provider)
 
 
 @_cmd(quick_app, "sheets")
-def sheets(project: ProjectOpt, print_only: PrintOpt = False):
-    """Gen character sheet còn thiếu trong Google Flow (claude --chrome)."""
-    _claude("sheets", project, print_only)
+def sheets(project: ProjectOpt, print_only: PrintOpt = False, provider: ProviderOpt = None):
+    """Gen character sheet còn thiếu (nguồn theo cài đặt hoặc --provider; claude --chrome)."""
+    _claude("sheets", project, print_only, provider)
 
 
 @_cmd(quick_app, "clips")
-def clips_flow(project: ProjectOpt, print_only: PrintOpt = False):
-    """Gen clip động trong Google Flow (claude --chrome)."""
-    _claude("clips", project, print_only)
+def clips_flow(project: ProjectOpt, print_only: PrintOpt = False, provider: ProviderOpt = None):
+    """Gen clip động (nguồn theo cài đặt hoặc --provider; claude --chrome)."""
+    _claude("clips", project, print_only, provider)
 
 
 @_cmd(quick_app, "review")
