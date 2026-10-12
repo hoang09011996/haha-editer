@@ -77,8 +77,9 @@ def run_voice(root: Path, cfg: Config, client: SpeechClient, *, preset: Preset |
             data = with_retry(lambda: client.synthesize(text=b.text, voice=preset.voice.name,
                                                         style=preset.voice.style, model=cfg.tts_model), sleep=sleep)
         except Exception as e:
-            raise VidflowError(f"TTS dừng ở mốc {b.n}: đã đọc {done}/{total} câu ({e}). "
-                               "Chạy lại `vidflow quick voice` để tiếp tục.") from e
+            hint = " — Gemini không trả lời, thường do hết lượt TTS miễn phí; thử lại sau" if isinstance(e, TimeoutError) else ""
+            raise VidflowError(f"TTS dừng ở mốc {b.n}: đã đọc {done}/{total} câu ({e}{hint}). "
+                               "Chạy lại `vidflow quick voice` để tiếp tục (các câu đã đọc được giữ lại).") from e
         out.write_bytes(ensure_wav(data, RATE))
         _read_pcm(out)  # kiểm tra định dạng sớm
         idx[str(b.n)] = {"hash": h, "text": b.text.strip()}

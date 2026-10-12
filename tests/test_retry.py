@@ -51,3 +51,17 @@ def test_http_transport_errors_are_transient():
     assert is_transient(httpx.ReadTimeout("treo"))
     assert is_transient(httpx.RemoteProtocolError("máy chủ đóng kết nối"))
     assert is_transient(httpx.ConnectError("mất mạng"))
+
+
+def test_call_with_deadline_returns_and_raises():
+    import time
+    import pytest
+    from vidflow.retry import call_with_deadline
+    assert call_with_deadline(lambda: 7, 1) == 7
+    with pytest.raises(ValueError):
+        call_with_deadline(lambda: (_ for _ in ()).throw(ValueError("x")), 1)
+    t = time.time()
+    with pytest.raises(TimeoutError, match="0.2"):
+        call_with_deadline(lambda: time.sleep(5), 0.2)
+    assert time.time() - t < 2
+    assert is_transient(TimeoutError())

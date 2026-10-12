@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 
 from vidflow.errors import ConfigError, VidflowError
+from vidflow.retry import call_with_deadline
 from vidflow.video import PollResult
 
 
-HTTP_TIMEOUT_MS = 120_000  # mỗi request Gemini tối đa 2 phút, quá thì báo lỗi để with_retry thử lại
+HTTP_TIMEOUT_MS = 90_000  # mỗi request Gemini tối đa 90 giây, quá thì báo lỗi để with_retry thử lại
 
 
 def gemini_client():
@@ -30,12 +31,13 @@ class GeminiSpeechClient:
         content: dict = {"type": "text", "text": text}
         if style:
             content["annotations"] = [{"type": "speech_metadata", "style": style}]
-        it = self._c.interactions.create(
+        # SDK bỏ qua timeout ở chỗ này (đã thử) — chặn cứng bằng luồng có hạn chót.
+        it = call_with_deadline(lambda: self._c.interactions.create(
             model=model,
             input=[{"type": "user_input", "content": [content]}],
             response_format={"type": "audio"},
             generation_config={"speech_config": [{"voice": voice}]},
-        )
+        ), HTTP_TIMEOUT_MS / 1000)
         return base64.b64decode(it.output_audio.data)
 
 
