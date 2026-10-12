@@ -1,0 +1,362 @@
+"use strict";
+// vidflow — quy trình nhanh: Bảng mốc · Nhân vật · Xem thử & Xuất · Tạo video nhanh (spec 2026-10-12, Giai đoạn 3).
+// Dùng chung tiện ích của app.js (nạp trước): h, api, toast, S, setCurrent, startPolling, openProject, loadProjects.
+
+const Q = {
+  name: null, data: null, screen: "board", filter: "all", sel: null, fresh: false, provider: null,
+  drafts: {}, reviewing: {}, timer: null, wave: null, player: null,
+  exportOpts: { resolution: "1080p", transition: "scene", clip_fit: "trim", zoom: true, subtitles: true, logo: true, clip_audio: false, music: false },
+};
+const QSCREENS = {}; // id màn → hàm trả [vùng giữa, khung phải | null]; mỗi màn tự đăng ký
+const QNAV = [["board", "Bảng mốc"], ["chars", "Nhân vật"], ["preview", "Xem thử & Xuất"]];
+const QST = { ok: ["Có ảnh", "st-ok"], gen: ["Đang gen", "st-gen"], error: ["Lỗi", "st-error"], pending: ["Chờ", "st-pending"], redo: ["Gen lại", "st-redo"], blocked: ["Bị chặn", "st-blocked"] };
+const QCLIP = { pending: "chưa gen", ok: "đã có clip", redo: "chờ gen lại", error: "lỗi" };
+const QJOB = { running: "đang chạy", done: "xong", failed: "lỗi", stopped: "đã dừng" };
+const QSTAGE = { new: "mới tạo", ideas: "chờ chọn ý tưởng", picked: "đã chọn ý tưởng", script: "đã có kịch bản", voiced: "đã có giọng đọc", prompted: "đã có prompt", imaged: "đủ ảnh", built: "đã dựng" };
+const SCENE_COLORS = ["#3557D6", "#E09A2D", "#8B5E3C", "#2E8B6E", "#7A4FB5", "#0069ba"];
+const PROVIDERS = [["flow", "Flow"], ["gemini", "Gemini"], ["aistudio", "AI Studio"]];
+const VIDEO_MODELS = ["", "Veo 3.1 Lite", "Veo 3.1 Fast", "Veo 3.1 Quality", "Omni 1.1 Flash"];
+const IMAGE_MODELS = ["Nano Banana 2"];
+const FLOW_JOBS = { flow: "gen ảnh mốc", clips: "gen clip động", sheets: "gen character sheet" };
+const QFILTERS = [
+  ["all", "Tất cả", () => true],
+  ["error", "Lỗi", b => b.state === "error" || b.clip.status === "error"],
+  ["noimg", "Chưa có ảnh", b => b.state !== "ok"],
+  ["blocked", "Bị chặn", b => b.state === "blocked"],
+  ["clip", "Clip", b => b.clip.enabled],
+  ["cont", "Nối cảnh", b => b.cont],
+];
+
+// ================= tiện ích =================
+function fmtT(s) { if (s == null) return "--:--"; const m = Math.floor(s / 60), x = Math.floor(s % 60); return `${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`; }
+function fmtT1(s) { s = Math.max(0, s || 0); const m = Math.floor(s / 60); return `${String(m).padStart(2, "0")}:${(s - m * 60).toFixed(1).padStart(4, "0")}`; }
+function pad3(n) { return String(n).padStart(3, "0"); }
+function qBeat(n) { return (Q.data?.beats || []).find(b => b.n === n) || null; }
+function qChar(id) { return (Q.data?.characters || []).find(c => c.id === id) || null; }
+async function qPost(path, body) { return api(`/api/quick/${Q.name}${path}`, { method: "POST", body: JSON.stringify(body || {}) }); }
+async function qReload() { Q.data = await api(`/api/quick/${Q.name}`); if (Q.data.job) S.job = Q.data.job; }
+async function qRefresh() { try { await qReload(); } catch (e) { toast(e.message, true); } Q.render(); } // sau mỗi thao tác: tải lại, lỗi → toast
+function provLabel(p) { return (PROVIDERS.find(x => x[0] === p) || [p, p || "Flow"])[1]; }
+// nguồn gen cho việc gen: ô "Nguồn" (ghi đè một lần) hoặc cài đặt video (ảnh/sheet: image_provider; clip: video_provider)
+function qProvider(kind) { const f = Q.data.quick.flow; return Q.provider || (kind === "clips" ? f.video_provider : f.image_provider) || "flow"; }
+
+// ================= mở / vẽ =================
+Q.open = async function (name) {
+  if (Q.name !== name) Object.assign(Q, { name, screen: "board", filter: "all", sel: null, fresh: true, drafts: {}, reviewing: {} });
+  Q.wave = null;
+  try { await qReload(); } catch (e) { toast(e.message, true); return; }
+  if (Q.fresh) { Q.sel = Q.data.beats.length ? Q.data.beats[0].n : null; Q.fresh = false; }
+  if (Q.sel != null && !qBeat(Q.sel)) Q.sel = Q.data.beats.length ? Q.data.beats[0].n : null;
+  Q.render();
+  qAutoRefresh();
+};
+function qAutoRefresh() {
+  clearInterval(Q.timer);
+  Q.timer = setInterval(async () => {
+    if (S.kind !== "quick" || S.name !== Q.name || !(Q.data?.job && Q.data.job.state === "running")) { clearInterval(Q.timer); return; }
+    if (Q.screen === "preview") return; // không làm gián đoạn trình phát
+    try { await qReload(); } catch { return; }
+    Q.render({ keepPanel: true });
+  }, 5000);
+}
+Q.render = function (opts = {}) {
+  const d = Q.data; if (!d) return;
+  document.getElementById("savebar").hidden = true; document.body.classList.remove("has-savebar");
+  const main = document.getElementById("main");
+  const oldPanel = opts.keepPanel ? main.querySelector(".panel") : null;
+  const keep = oldPanel && oldPanel.contains(document.activeElement) ? oldPanel : null; // đang gõ trong khung phải → giữ nguyên
+  if (!keep) main.querySelectorAll("audio, video").forEach(m => m.pause());
+  setCurrent(d.preset.name, d.quick.title || d.name, [d.status.voice_s ? fmtT(d.status.voice_s) : null, `${d.beats.length} mốc`, d.aspect].filter(Boolean).join(" · "));
+  document.getElementById("railNav").replaceChildren(qRail());
+  const [center, panel] = (QSCREENS[Q.screen] || QSCREENS.board)();
+  main.className = panel ? "app" : "app single";
+  main.replaceChildren(...[center, panel ? (keep || panel) : null].filter(Boolean));
+};
+function qSteps() {
+  const d = Q.data, st = d.status, b = st.beats;
+  const idx = ["new", "ideas", "picked", "script", "voiced", "prompted", "imaged", "built"].indexOf(st.stage);
+  const steps = [
+    ["Ý tưởng", st.ideas ? `${st.ideas} ý` : "", idx >= 2],
+    ["Kịch bản · mốc", b.total ? String(b.total) : "", idx >= 3 && b.total > 0],
+    ["Giọng đọc", st.voice_s ? fmtT(st.voice_s) : "", b.total > 0 && b.timed],
+    ["Prompt", b.total ? `${b.prompted}/${b.total}` : "", b.total > 0 && b.prompted === b.total],
+    ["Ảnh · clip", b.total ? `${b.imaged}/${b.total}` : "", b.total > 0 && b.imaged === b.total],
+    ["Xuất video", d.renders.length ? String(d.renders.length) : "", d.renders.length > 0],
+  ];
+  const now = steps.findIndex(s => !s[2]);
+  return steps.map(([label, meta, done], i) => ({ label, meta, state: done ? "done" : i === now ? "now" : "todo" }));
+}
+function qRail() {
+  const d = Q.data, missing = d.characters.filter(c => !c.image_url && c.uses > 0).length;
+  const link = (id, label) => h("button", { class: "navlink" + (Q.screen === id ? " active" : ""), onclick: () => { Q.screen = id; Q.render(); } },
+    label, id === "chars" && missing ? h("span", { class: "tag warn" }, `${missing} thiếu`) : null);
+  return h("div", {},
+    h("div", { class: "navlist" }, QNAV.filter(([id]) => QSCREENS[id]).map(([id, label]) => link(id, label))),
+    h("div", { class: "psteps" }, h("span", { class: "eyebrow" }, "Tiến độ"),
+      h("ol", {}, qSteps().map((s, i) => h("li", { class: s.state },
+        h("span", { class: "pdot " + s.state }, s.state === "done" ? "✓" : String(i + 1)), h("span", { class: "plabel" }, s.label), h("span", { class: "pmeta" }, s.meta))))));
+}
+
+// ================= việc nền =================
+async function qJob(kind, { instruction = "", options = null, confirmText = null } = {}) {
+  const q = Q.data.quick;
+  if (kind === "clips" && !q.flow.video_model) { toast("Chọn model clip trong Cài đặt trước.", true); Q.screen = "board"; Q.sel = null; Q.render(); return; }
+  const gen = !!FLOW_JOBS[kind];
+  if (gen && !confirm(`Sẽ ${FLOW_JOBS[kind]} trong ${provLabel(qProvider(kind))} (phiên Chrome đã đăng nhập, tốn lượt/tín dụng gói). Đừng thao tác Chrome khi đang chạy. Tiếp tục?`)) return;
+  if (confirmText && !confirm(confirmText)) return;
+  try {
+    S.job = await qPost("/jobs", { kind, instruction, options: options || {}, provider: gen && Q.provider ? Q.provider : null });
+    Q.data.job = S.job;
+    toast(`Bắt đầu: ${S.job.label}`); Q.render(); startPolling(); qAutoRefresh();
+  } catch (e) { toast(e.message, true); }
+}
+async function qStop() {
+  if (!confirm("Dừng việc đang chạy? Ảnh/clip đã gen giữ nguyên.")) return;
+  try { await qPost("/jobs/stop"); toast("Đã dừng"); } catch (e) { toast(e.message, true); }
+  await Q.open(Q.name);
+}
+async function qRetryErrors() {
+  try {
+    const img = await qPost("/retry", { ns: null, clip: false });
+    const clip = await qPost("/retry", { ns: null, clip: true });
+    toast(`Đã đưa ${img.count + clip.count} mốc lỗi về hàng chờ`);
+    await qReload();
+    await qJob(img.count ? "flow" : "clips");
+  } catch (e) { toast(e.message, true); }
+}
+async function qPick(n) {
+  try { const r = await qPost("/pick", { n }); toast(`Đã chọn: ${r.title}`); } catch (e) { toast(e.message, true); }
+  await Q.open(Q.name);
+}
+
+// ================= Bảng mốc — vùng giữa =================
+function qCounts() {
+  const c = { ok: 0, gen: 0, error: 0, pending: 0, redo: 0, blocked: 0 };
+  for (const b of Q.data.beats) c[b.state]++;
+  return c;
+}
+function qBoardHead() {
+  const d = Q.data, c = qCounts(), total = d.beats.length || 1;
+  const job = d.job && d.job.state === "running" ? d.job : null, busy = S.job?.state === "running";
+  const errs = d.beats.filter(b => b.error).length + d.beats.filter(b => b.clip.status === "error").length;
+  const clipTodo = d.beats.filter(b => b.clip.enabled && b.clip.status !== "ok").length;
+  const seg = (k, color) => h("span", { style: `width:${(c[k] / total) * 100}%;background:${color}` });
+  const provSel = h("select", { class: "prov-sel", "aria-label": "Nguồn gen (ghi đè một lần)" }, h("option", { value: "" }, "Nguồn: theo cài đặt"),
+    PROVIDERS.map(([v, l]) => h("option", { value: v }, "Nguồn: " + l)));
+  provSel.value = Q.provider || ""; provSel.onchange = () => { Q.provider = provSel.value || null; Q.render({ keepPanel: true }); };
+  const stats = [["ok", "có ảnh"], ["gen", "đang gen"], ["error", "lỗi"], ["pending", "chờ"], ["redo", "gen lại"], ["blocked", "bị chặn"]];
+  return h("header", { class: "qhead" }, h("h1", {}, "Bảng mốc"),
+    h("div", { class: "qprog" },
+      h("div", { class: "qstats" }, stats.map(([k, l]) => h("span", { class: "qstat " + k }, h("strong", {}, String(c[k])), " " + l))),
+      h("div", { class: "qbar", role: "img", "aria-label": `${c.ok} trên ${d.beats.length} mốc có ảnh` },
+        seg("ok", "var(--success)"), seg("gen", "var(--secondary)"), seg("error", "var(--error)"), seg("blocked", "var(--warn)"))),
+    h("div", { class: "row" }, provSel,
+      job ? h("button", { onclick: qStop }, "Tạm dừng")
+        : h("button", { class: "primary", disabled: !d.beats.length || busy, onclick: () => qJob("flow") }, `Gen ảnh (${provLabel(qProvider("flow"))})`),
+      errs ? h("button", { class: "danger", disabled: busy, onclick: qRetryErrors }, `Chạy lại ${errs} lỗi`) : null,
+      clipTodo ? h("button", { class: "primary", disabled: busy, onclick: () => qJob("clips") }, `Gen ${clipTodo} clip (${provLabel(qProvider("clips"))})`) : null,
+      h("button", { onclick: () => { Q.sel = null; Q.render(); } }, "Cài đặt")));
+}
+function qNext() {
+  const d = Q.data, st = d.status, q = d.quick, busy = S.job?.state === "running";
+  const btn = (label, fn, primary = true) => h("button", { class: primary ? "primary" : "", disabled: busy, onclick: fn }, label);
+  const box = (title, text, ...actions) => h("div", { class: "card next-card" }, h("h3", {}, title), text ? h("p", { class: "hint" }, text) : null, h("div", { class: "row" }, actions));
+  if (st.stage === "new") return box("Bước 1 · Ý tưởng", "AI đề xuất 5 ý tưởng theo brief của bộ kênh.",
+    btn("Đề xuất 5 ý tưởng", () => qJob("ideas", { instruction: q.title ? `Chủ đề người dùng gợi ý: ${q.title}` : "" })));
+  if (st.stage === "ideas") return h("div", { class: "card next-card" }, h("h3", {}, "Bước 1 · Chọn một ý tưởng"),
+    h("ol", { class: "ideas" }, q.ideas.map((it, i) => h("li", {}, h("div", { class: "idea" },
+      h("div", {}, h("b", {}, it.title), it.hook ? h("p", { class: "hint" }, it.hook) : null, it.why_viral ? h("p", { class: "hint" }, "Vì sao: " + it.why_viral) : null),
+      h("button", { class: "primary small", disabled: busy, onclick: () => qPick(i + 1) }, "Chọn"))))),
+    h("div", { class: "row" }, btn("Đề xuất lại", () => qJob("ideas"), false)));
+  if (st.stage === "picked") return box("Bước 2 · Kịch bản", `Ý tưởng: ${st.picked_title}. AI viết lời dẫn, tách mốc và đề xuất nhân vật riêng.`, btn("Viết kịch bản + tách mốc", () => qJob("script")));
+  if (st.stage === "script") return box("Bước 3 · Giọng đọc", "Đọc từng mốc bằng Gemini TTS (gói miễn phí) và điền thời gian.", btn("Tạo giọng đọc", () => qJob("voice")));
+  if (st.beats.prompted < st.beats.total) return box("Bước 4 · Prompt", `${st.beats.prompted}/${st.beats.total} mốc có prompt đạt kiểm duyệt.`, btn("Viết prompt ảnh + clip", () => qJob("prompts")));
+  if (st.chars_missing.length) return box("Nhân vật thiếu ảnh", `${st.chars_missing.map(c => "@" + c).join(", ")} chưa có character sheet — ${st.blocked} mốc đang bị chặn.`,
+    btn(`Gen sheet (${provLabel(qProvider("sheets"))})`, () => qJob("sheets")), QSCREENS.chars ? btn("Mở Nhân vật", () => { Q.screen = "chars"; Q.render(); }, false) : null);
+  return null;
+}
+function qFilters() {
+  return h("div", { class: "seg-group", role: "group", "aria-label": "Lọc mốc" }, QFILTERS.map(([k, label, fn]) =>
+    h("button", { class: Q.filter === k ? "on" : "", "aria-pressed": Q.filter === k ? "true" : "false", onclick: () => { Q.filter = k; Q.render({ keepPanel: true }); } },
+      label, " ", h("span", { class: "mono count" }, String(Q.data.beats.filter(fn).length)))));
+}
+function qSceneList(beats) {
+  const scenes = [];
+  for (const b of beats) {
+    if (!b.cont || !scenes.length) scenes.push({ beats: [] });
+    scenes[scenes.length - 1].beats.push(b);
+  }
+  scenes.forEach((s, i) => {
+    const lead = s.beats.flatMap(b => b.refs).map(qChar).find(c => c && c.color);
+    s.color = lead ? lead.color : SCENE_COLORS[i % SCENE_COLORS.length];
+    s.index = i + 1;
+  });
+  return scenes;
+}
+function qRefChip(id) {
+  const c = qChar(id)?.color || "#4A4F6E";
+  return h("span", { class: "ref mono", style: `background:${c}1F;color:color-mix(in srgb, ${c} 70%, #0E1238)` }, "@" + id);
+}
+function qThumbLabel(b) {
+  return { gen: "Flow đang vẽ…", error: "Flow từ chối prompt", blocked: "Bị chặn: " + (b.blocked || ""), redo: "Chờ gen lại",
+    pending: b.blocked ? "Chờ: " + b.blocked : b.prompt ? "Chưa có ảnh" : "Chưa có prompt" }[b.state] || "";
+}
+function qCard(b, color) {
+  const [label, cls] = QST[b.state];
+  const clipTag = b.clip.enabled ? h("span", { class: "cliptag" }, b.clip.status === "ok" ? "CLIP" : b.clip.status === "error" ? "CLIP lỗi" : "CLIP chờ") : null;
+  return h("div", { class: "beat-wrap" },
+    b.cont ? h("span", { class: "contline", title: "Nối cảnh với mốc trước", style: `background:${color}` }) : null,
+    h("button", { class: "beat" + (Q.sel === b.n ? " sel" : "") + (b.state === "error" ? " err" : ""), "aria-pressed": Q.sel === b.n ? "true" : "false", onclick: () => { Q.sel = b.n; Q.render(); } },
+      h("div", { class: "thumb" }, b.image_url ? h("img", { src: b.image_url, alt: `Ảnh mốc ${b.n}`, loading: "lazy" }) : h("span", { class: "thumb-ph" }, qThumbLabel(b))),
+      h("div", { class: "beat-body" },
+        h("div", { class: "beat-meta" }, h("span", { class: "mono bn" }, pad3(b.n)), h("span", { class: "mono bt" }, fmtT(b.start)), b.image_url && b.provider ? h("span", { class: "prov" }, provLabel(b.provider)) : null, h("span", { class: "grow" }), clipTag, h("span", { class: "st " + cls }, label)),
+        h("div", { class: "beat-text" }, b.text),
+        h("div", { class: "refs-row" }, b.refs.map(qRefChip)))));
+}
+function qScenes() {
+  const fn = QFILTERS.find(f => f[0] === Q.filter)[2];
+  const out = qSceneList(Q.data.beats).map(sc => {
+    const shown = sc.beats.filter(fn);
+    if (!shown.length) return null;
+    const first = sc.beats[0], last = sc.beats[sc.beats.length - 1];
+    return h("section", { class: "scene-sec" },
+      h("div", { class: "scene-h" }, h("span", { class: "swatch", style: `background:${sc.color}` }), h("h2", {}, `Cảnh ${sc.index}`),
+        h("span", { class: "mono muted" }, `${pad3(first.n)}–${pad3(last.n)} · ${fmtT(first.start)}`), h("span", { class: "rule" })),
+      h("div", { class: "beats-row" }, shown.map(b => qCard(b, sc.color))));
+  }).filter(Boolean);
+  return out.length ? h("div", { class: "scenes" }, out) : h("p", { class: "hint" }, "Không có mốc nào khớp bộ lọc.");
+}
+function qQuotaBanner() {
+  const j = Q.data.job;
+  if (!j || !j.quota_exhausted) return null;
+  return h("div", { class: "notice warn banner", role: "alert" }, h("strong", {}, `Hết lượt ở ${provLabel(j.provider)}. `),
+    "Chọn nguồn khác ở ô “Nguồn” phía trên (Flow, Gemini hoặc AI Studio) rồi bấm Gen lại, hoặc đổi nguồn mặc định trong Cài đặt.");
+}
+function qBoard() {
+  const d = Q.data, job = d.job;
+  const center = h("section", { class: "content" }, qBoardHead(), qQuotaBanner(), qNext(),
+    d.beats.length ? qFilters() : null, d.beats.length ? qScenes() : h("p", { class: "hint" }, "Chưa có mốc — làm theo thẻ Bước tiếp theo ở trên."),
+    job ? h("details", { class: "joblog", open: job.state !== "done" }, h("summary", {}, `${job.label} · ${QJOB[job.state] || job.state}`),
+      h("pre", { class: "log", id: "log" }, job.log || "(đang chạy…)")) : null);
+  return [center, qPanel()];
+}
+
+// ================= Bảng mốc — khung phải =================
+function qPanel() {
+  const b = Q.sel != null ? qBeat(Q.sel) : null;
+  return h("aside", { class: "panel", "aria-label": b ? `Chi tiết mốc ${b.n}` : "Cài đặt video" }, b ? qDetail(b) : qSettings());
+}
+function qReviewLabel(rv, key) {
+  if (Q.reviewing[key]) return h("span", { class: "rv busy" }, "Đang kiểm duyệt…");
+  if (!rv) return h("span", { class: "rv none" }, "Chưa kiểm duyệt");
+  if (rv.verdict === "override") return h("span", { class: "rv ok" }, "Duyệt tay");
+  return h("span", { class: "rv " + (rv.verdict === "pass" ? "ok" : "bad") }, `${rv.verdict === "pass" ? "Đạt" : "Trượt"} · ${rv.score}/10`);
+}
+function qIssues(rv) { return rv && rv.verdict === "fail" && rv.issues.length ? h("ul", { class: "issues-list" }, rv.issues.map(x => h("li", {}, x))) : null; }
+function qDraft(b, kind) { const k = `${b.n}:${kind}`; return k in Q.drafts ? Q.drafts[k] : (kind === "clip" ? b.clip.prompt : b.prompt); }
+function qAttach(a) {
+  const pic = a.url ? h("img", { src: a.url, alt: "" }) : h("span", { class: "att-ph" });
+  if (a.kind === "prev") return h("span", { class: "att prev" }, pic, h("span", {}, `Ảnh mốc ${pad3(a.n)} · nối cảnh${a.url ? "" : " (chưa có)"}`));
+  return h("span", { class: "att" + (a.url ? "" : " missing") }, pic, h("span", { class: "mono" }, "@" + a.id), a.url ? null : h("span", { class: "st st-blocked" }, "Thiếu ảnh"));
+}
+function qDetail(b) {
+  const d = Q.data, q = d.quick, [label, cls] = QST[b.state], busy = S.job?.state === "running";
+  const rvImg = !!Q.reviewing[`${b.n}:img`], rvClip = !!Q.reviewing[`${b.n}:clip`]; // đang kiểm duyệt → khóa nút + ô prompt
+  const imgTa = h("textarea", { class: "prompt-area", rows: 6, "aria-label": "Prompt ảnh", readonly: rvImg });
+  imgTa.value = qDraft(b, "img"); imgTa.oninput = () => { Q.drafts[`${b.n}:img`] = imgTa.value; };
+  const clipOn = h("input", { type: "checkbox", "aria-label": "Làm clip động", disabled: rvClip });
+  clipOn.checked = b.clip.enabled; clipOn.onchange = () => qToggleClip(b.n, clipOn.checked);
+  let clipBlock = null;
+  if (b.clip.enabled) {
+    const clipTa = h("textarea", { class: "prompt-area", rows: 4, "aria-label": "Prompt clip", readonly: rvClip });
+    clipTa.value = qDraft(b, "clip"); clipTa.oninput = () => { Q.drafts[`${b.n}:clip`] = clipTa.value; };
+    clipBlock = h("div", { class: "clip-inner" },
+      h("div", { class: "lbl" }, h("span", { class: "eyebrow" }, "Prompt clip"), qReviewLabel(b.clip.review, `${b.n}:clip`)), clipTa, qIssues(b.clip.review),
+      b.clip.error ? h("p", { class: "notice err" }, "Flow từ chối clip: " + b.clip.error) : null,
+      b.clip_url ? h("video", { src: b.clip_url, controls: true, preload: "metadata", class: "clip-prev" }) : null,
+      h("span", { class: "hint" }, `${provLabel(q.flow.video_provider)} · ${q.flow.video_model || "Chưa chọn model clip"} · ${q.flow.resolution} · gen từ ảnh mốc này · ${d.status.clips.enabled}/${q.max_clips} clip đã chọn · ${QCLIP[b.clip.status]}${b.clip.provider ? " · clip gen bằng " + provLabel(b.clip.provider) : ""}`),
+      h("div", { class: "row" },
+        h("button", { class: "small", disabled: rvClip, onclick: () => qOverride(b.n, true) }, "Duyệt tay"),
+        b.clip.status === "ok" ? h("button", { class: "small", disabled: rvClip, onclick: () => qRedo(b.n, true) }, "Gen lại clip") : null,
+        h("button", { class: "small secondary", disabled: rvClip, onclick: () => qSaveReview(b.n, true) }, "Lưu & kiểm duyệt clip")));
+  }
+  return h("div", { class: "detail" },
+    h("div", { class: "detail-h" }, h("h2", {}, `Mốc ${pad3(b.n)}`), h("span", { class: "mono muted" }, `${fmtT(b.start)} → ${fmtT(b.end)}`), h("span", { class: "grow" }), h("span", { class: "st " + cls }, label)),
+    h("p", { class: "quote" }, `“${b.text}”`),
+    b.image_url ? h("img", { class: "detail-img", src: b.image_url, alt: `Ảnh mốc ${b.n}` }) : null,
+    b.image_url && b.provider ? h("span", { class: "hint" }, "Ảnh gen bằng " + provLabel(b.provider)) : null,
+    b.error ? h("p", { class: "notice err" }, "Flow từ chối ảnh: " + b.error) : null,
+    b.blocked && b.state !== "ok" ? h("p", { class: "notice warn" }, (b.state === "blocked" ? "Bị chặn: " : "Chờ: ") + b.blocked) : null,
+    h("div", { class: "group" }, h("span", { class: "eyebrow" }, "Ảnh đính kèm khi gen"),
+      b.attach.length ? h("div", { class: "attach" }, b.attach.map(qAttach)) : h("span", { class: "hint" }, "Không đính ảnh nào")),
+    h("label", { class: "group" }, h("span", { class: "lbl" }, h("span", { class: "eyebrow" }, "Prompt ảnh"), qReviewLabel(b.review, `${b.n}:img`)), imgTa),
+    qIssues(b.review),
+    h("div", { class: "clipbox" }, h("label", { class: "switch" }, h("span", {}, "Làm clip động"), clipOn), clipBlock),
+    h("div", { class: "actions" },
+      h("button", { disabled: b.status !== "ok" || rvImg, onclick: () => qRedo(b.n, false) }, "Gen lại ảnh"),
+      h("button", { disabled: busy || rvImg || rvClip, onclick: () => qJob("prompts", { instruction: `Chỉ viết lại prompt ảnh (và prompt clip nếu bật) của mốc ${b.n}; không đụng mốc khác.`, confirmText: `AI sẽ viết lại prompt mốc ${b.n}. Tiếp tục?` }) }, "AI viết lại"),
+      h("button", { disabled: rvImg, onclick: () => qOverride(b.n, false) }, "Duyệt tay"),
+      h("button", { class: "secondary grow", disabled: rvImg, onclick: () => qSaveReview(b.n, false) }, "Lưu & kiểm duyệt")));
+}
+function qSettings() {
+  const q = Q.data.quick, f = { ...q.flow, max_clips: q.max_clips, allow_cont: q.allow_cont };
+  const sel = (key, opts) => {
+    const all = [...new Set([...opts, f[key] ?? ""])];
+    const s = h("select", {}, all.map(o => h("option", { value: o }, o || "— chọn —")));
+    s.value = f[key] ?? ""; s.onchange = () => { f[key] = s.value; }; return s;
+  };
+  const psel = key => { const s = h("select", {}, PROVIDERS.map(([v, l]) => h("option", { value: v }, l))); s.value = f[key] || "flow"; s.onchange = () => { f[key] = s.value; }; return s; };
+  const max = h("input", { type: "number", min: 0, max: 200 }); max.value = f.max_clips; max.oninput = () => { f.max_clips = Number(max.value); };
+  const cont = h("input", { type: "checkbox" }); cont.checked = f.allow_cont; cont.onchange = () => { f.allow_cont = cont.checked; };
+  const save = async () => {
+    if (f.max_clips > 0 && !f.video_model) { toast("Chọn model clip (bắt buộc khi số clip > 0).", true); return; }
+    try {
+      await qPost("/settings", { image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider || "flow", video_provider: f.video_provider || "flow", max_clips: f.max_clips, allow_cont: f.allow_cont });
+      toast("Đã lưu cài đặt"); await qRefresh();
+    } catch (e) { toast(e.message, true); }
+  };
+  return h("div", { class: "detail" }, h("h2", {}, "Cài đặt video"), h("p", { class: "hint" }, "Bấm một mốc trên bảng để xem chi tiết."),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Model ảnh"), sel("image_model", IMAGE_MODELS)),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Model clip động"), sel("video_model", VIDEO_MODELS)),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Độ phân giải clip"), sel("resolution", ["720p", "1080p"])),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Nguồn gen ảnh (và sheet)"), psel("image_provider")),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Nguồn gen clip"), psel("video_provider")),
+    h("label", { class: "f" }, h("span", { class: "flabel" }, "Số clip tối đa (0 = chỉ ảnh)"), max),
+    h("label", { class: "checks" }, cont, "Cho phép nối cảnh"),
+    h("button", { class: "primary", onclick: save }, "Lưu cài đặt"));
+}
+async function qSaveReview(n, clip) {
+  const key = `${n}:${clip ? "clip" : "img"}`, b = qBeat(n), saved = clip ? b.clip.prompt : b.prompt;
+  const text = (key in Q.drafts ? Q.drafts[key] : saved).trim();
+  if (!text) { toast("Prompt rỗng.", true); return; }
+  try { if (text !== saved) await qPost("/prompt", { n, prompt: text, clip }); } catch (e) { toast(e.message, true); return; }
+  delete Q.drafts[key];
+  Q.reviewing[key] = true;
+  await qRefresh();
+  try {
+    const r = await qPost("/review", { n, clip });
+    toast(`Mốc ${n}: ${r.review.verdict === "pass" ? "đạt" : "trượt"} ${r.review.score}/10`, r.review.verdict !== "pass");
+  } catch (e) { toast(e.message, true); }
+  delete Q.reviewing[key];
+  await qRefresh();
+}
+async function qOverride(n, clip) {
+  const key = `${n}:${clip ? "clip" : "img"}`, b = qBeat(n), saved = clip ? b.clip.prompt : b.prompt;
+  if (!confirm(`Duyệt tay prompt ${clip ? "clip" : "ảnh"} mốc ${n} (cho phép gen dù chưa đạt kiểm duyệt)?`)) return;
+  try {
+    const text = key in Q.drafts ? Q.drafts[key].trim() : "";
+    if (text && text !== saved) await qPost("/prompt", { n, prompt: text, clip });
+    delete Q.drafts[key];
+    await qPost("/override", { n, clip }); toast(`Mốc ${n}: đã duyệt tay`);
+  } catch (e) { toast(e.message, true); }
+  await qRefresh();
+}
+async function qRedo(n, clip) {
+  try { await qPost("/redo", { ns: [n], clip }); toast(`Mốc ${n}: chờ gen lại ${clip ? "clip" : "ảnh"}`); } catch (e) { toast(e.message, true); }
+  await qRefresh();
+}
+async function qToggleClip(n, on) {
+  try { await qPost("/clip", { ns: [n], on }); } catch (e) { toast(e.message, true); }
+  await qRefresh();
+}
+QSCREENS.board = qBoard;

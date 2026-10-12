@@ -74,3 +74,12 @@ def test_job_state_text_shared_and_no_double_step_number():
     assert "jobStateText(S.job.state)" in js and "jobStateText(j.state)" in js
     assert "}, S.job.state)" not in js
     assert 'class: "f7n" }, `${i + 1}.' not in js
+
+
+def test_quick_script_loaded_after_app():
+    html = _read("index.html")
+    assert html.index('src="/static/app.js"') < html.index('src="/static/quick.js"')
+    js = _read("quick.js")
+    assert "QSCREENS.board = qBoard" in js and "Lưu & kiểm duyệt" in js and "Duyệt tay" in js
+    assert "qQuotaBanner" in js and "Nguồn: theo cài đặt" in js and "provider:" in js
+    assert "j.quota_exhausted" in _read("app.js")

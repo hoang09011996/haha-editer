@@ -121,7 +121,7 @@ const TEMPLATES = [
   { title: "Kể chuyện", idea: "Kể chuyện 40s: cô gái 25 tuổi mở tiệm trà chanh từ 0 đồng, thất bại lần đầu rồi đông khách", style: "anim_3d", aspect: "9:16" },
 ];
 
-const S = { projects: [], name: null, data: null, dirty: false, step: "idea", job: null, poll: null, focus: null, sugg: null, suggLoading: false };
+const S = { projects: [], name: null, kind: null, data: null, dirty: false, step: "idea", job: null, poll: null, focus: null, sugg: null, suggLoading: false };
 
 // ================= tiện ích =================
 function h(tag, attrs = {}, ...kids) {
@@ -139,7 +139,10 @@ async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
   if (r.status === 401) { location.href = "/login"; throw new Error("Cần đăng nhập"); }
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.detail || `Lỗi ${r.status}`);
+  if (!r.ok) { // detail: chuỗi tiếng Việt (lỗi người dùng) hoặc danh sách lỗi kiểm dữ liệu của FastAPI
+    const d = body.detail;
+    throw new Error(typeof d === "string" && d ? d : Array.isArray(d) && d.length ? d.map(x => x.msg || String(x)).join("; ") : `Lỗi ${r.status}`);
+  }
   return body;
 }
 function toast(msg, err = false) {
@@ -200,24 +203,32 @@ function guide(step) {
 
 // ================= tải / lưu =================
 async function loadProjects() {
-  S.projects = await api("/api/projects");
+  const [full, quick] = await Promise.all([api("/api/projects"), api("/api/quick")]);
+  S.projects = [...full.map(p => ({ ...p, kind: "full" })), ...quick.map(p => ({ ...p, kind: "quick" }))];
   const sel = document.getElementById("projectSel");
-  sel.replaceChildren(h("option", { value: "" }, S.projects.length ? "— chọn project —" : "— chưa có project —"), ...S.projects.map(p => h("option", { value: p.name }, `${p.title} (${p.name})`)));
+  const opt = p => h("option", { value: p.name }, `${p.title} (${p.name})`);
+  sel.replaceChildren(...[h("option", { value: "" }, S.projects.length ? "Chọn video" : "Chưa có video"),
+    quick.length ? h("optgroup", { label: "Video nhanh" }, S.projects.filter(p => p.kind === "quick").map(opt)) : null,
+    full.length ? h("optgroup", { label: "Video chi tiết" }, S.projects.filter(p => p.kind === "full").map(opt)) : null].filter(Boolean));
   sel.value = S.name || "";
 }
+function stopMedia() { document.querySelectorAll("#main audio, #main video").forEach(m => m.pause()); }
 async function openProject(name, jumpToCurrent = false) {
   if (S.dirty && !confirm("Có thay đổi chưa lưu. Bỏ qua?")) { document.getElementById("projectSel").value = S.name || ""; return; }
+  stopMedia();
   S.name = name; S.dirty = false; S.focus = null; S.sugg = null;
+  S.kind = name ? (S.projects.find(p => p.name === name)?.kind || "full") : null;
   document.getElementById("projectSel").value = name || "";
   document.getElementById("dirtyMark").textContent = "";
   if (!name) { S.data = null; history.replaceState(null, "", location.pathname); render(); return; }
   location.hash = name;
+  if (S.kind === "quick") { S.data = null; await Q.open(name); return; }
   S.data = await api(`/api/projects/${name}`);
   if (jumpToCurrent) S.step = currentStep().id;
   render();
 }
 async function save() {
-  if (!S.name) return;
+  if (!S.name || S.kind === "quick") return;
   const sc = S.data.script; if (sc.music && !sc.music.file) sc.music = null;
   try { await api(`/api/projects/${S.name}/script`, { method: "PUT", body: JSON.stringify(sc) }); S.dirty = false; toast("Đã lưu"); await openProject(S.name); }
   catch (e) { toast(e.message, true); }
@@ -231,6 +242,7 @@ function setCurrent(eyebrow, title, meta) {
   box.replaceChildren(h("span", { class: "eyebrow" }, eyebrow || ""), h("b", {}, title || ""), h("span", { class: "meta" }, meta || ""));
 }
 function render() {
+  if (S.name && S.kind === "quick") { document.getElementById("savebar").hidden = true; document.body.classList.remove("has-savebar"); Q.render(); return; }
   document.getElementById("savebar").hidden = !S.name;
   document.body.classList.toggle("has-savebar", !!S.name);
   const shell = document.getElementById("main"), nav = document.getElementById("railNav");
@@ -272,7 +284,7 @@ function renderHome() {
     h("div", { class: "tpls" }, TEMPLATES.map(t => h("button", { class: "tpl", onclick: () => openNew(t) }, h("b", {}, t.title), h("p", {}, t.idea)))),
     h("div", { class: "row center", style: "margin-top:18px" }, h("button", { class: "primary big", onclick: () => openNew() }, "+ Tự nhập ý tưởng")),
     S.projects.length ? h("div", {}, h("h3", { class: "sec" }, "Project của bạn"),
-      h("div", { class: "tpls" }, S.projects.map(p => h("button", { class: "tpl", onclick: () => openProject(p.name, true) }, h("b", {}, p.title), h("p", {}, `${p.scenes ?? 0} cảnh · ${p.approved ?? 0} đã duyệt · ${p.aspect ?? ""}`))))) : null);
+      h("div", { class: "tpls" }, S.projects.map(p => h("button", { class: "tpl", onclick: () => openProject(p.name, true) }, h("b", {}, p.title), h("p", {}, p.kind === "quick" ? `Video nhanh · ${p.beats ?? 0} mốc` : `${p.scenes ?? 0} cảnh · ${p.approved ?? 0} đã duyệt · ${p.aspect ?? ""}`))))) : null);
 }
 
 // ================= các bước =================
@@ -607,7 +619,9 @@ function startPolling() {
     if (j.state !== "running") {
       clearInterval(S.poll);
       if (j.project === S.name && !S.dirty) await openProject(S.name);
-      if (j.state === "done") toast(`Xong: ${j.label}`); else if (j.state === "failed") toast(`Lỗi: ${j.label} — xem log bên phải`, true);
+      const prov = { flow: "Flow", gemini: "Gemini", aistudio: "AI Studio" }[j.provider] || j.provider || "nguồn gen";
+      if (j.quota_exhausted) toast(`Hết lượt ở ${prov} — chọn nguồn khác trên Bảng mốc rồi chạy lại.`, true);
+      else if (j.state === "done") toast(`Xong: ${j.label}`); else if (j.state === "failed") toast(`Lỗi: ${j.label} — xem log bên phải`, true);
     }
   }, 2000);
 }
@@ -646,10 +660,10 @@ document.getElementById("saveBtn").addEventListener("click", save);
 document.getElementById("reloadBtn").addEventListener("click", () => { S.dirty = false; openProject(S.name); });
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); } });
 window.addEventListener("beforeunload", e => { if (S.dirty) { e.preventDefault(); e.returnValue = ""; } });
-(async () => {
+document.addEventListener("DOMContentLoaded", async () => {
   await loadProjects();
   const want = decodeURIComponent(location.hash.slice(1));
   if (want && S.projects.some(p => p.name === want)) await openProject(want, true); else render();
   const j = await api("/api/jobs/current").catch(() => null);
   if (j && j.state === "running") { S.job = j; startPolling(); }
-})();
+});
