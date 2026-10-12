@@ -164,3 +164,15 @@ vidflow quick render -p <project> [--resolution 1080p|720p] [--transition scene|
 ## Thứ tự làm
 
 Giai đoạn 1 → 2 → 3; mỗi giai đoạn một kế hoạch triển khai và một lần duyệt. Giai đoạn 3 có thể tách đổi phong cách chung (3a) và 4 màn mới (3b).
+
+## Bổ sung 2026-10-12 — Nhiều nguồn gen (Giai đoạn 1b, làm trước Giai đoạn 3)
+
+Người dùng duyệt: khi Flow hết lượt, gen ảnh/clip bằng dịch vụ khác qua CHÍNH phiên đăng nhập Chrome của người dùng (như Flow), không dùng API trả phí.
+
+- Nguồn: `flow` (mặc định) | `gemini` (gemini.google.com) | `aistudio` (aistudio.google.com) — cả ảnh và clip.
+- `quick.yaml` → `flow.image_provider`, `flow.video_provider`. Đổi bằng `vidflow quick settings --image-provider X --video-provider Y`; ghi đè một lần: `quick sheets|flow|clips --provider X`.
+- Mỗi ảnh/clip ghi `provider` (Beat.provider, Clip.provider) để biết nguồn.
+- Hết lượt: agent chạy `vidflow quick limit -p <project> --provider X --kind image|video` rồi dừng; job kết thúc mã 3 với thông báo "Hết lượt <ảnh|clip> ở <nguồn> — đổi nguồn bằng `quick settings ...`". `quick status --json` có `limits` (nguồn + loại + thời điểm); mở job mới với nguồn đó thì xóa mốc hết lượt cũ của nguồn đó. Không tự chuyển nguồn.
+- An toàn chi phí: nếu giao diện yêu cầu bật thanh toán, nhập thẻ, API key trả phí hoặc báo phí → agent dừng, ghi `quick limit ... --reason "cần trả phí"`, không bấm tiếp.
+- Hướng dẫn agent: `.claude/agents/gen-providers.md` — mỗi nguồn một mục (mở trang, chọn model/tỉ lệ, đính ảnh tham chiếu, tạo video từ ảnh, tải về, dấu hiệu hết lượt). Mục `gemini`/`aistudio` viết theo hiểu biết chung; lần chạy thật đầu tiên agent ghi lại giao diện quan sát được vào báo cáo để cập nhật.
+- Giao diện (Giai đoạn 3): ô chọn nguồn ảnh/clip ở "Tạo video nhanh" và cài đặt; nút Gen có thể chọn nguồn cho lần chạy; job kết thúc "hết lượt" → thông báo nổi + băng cảnh báo trên Bảng mốc gợi ý đổi nguồn; nhãn nguồn trên thẻ mốc.
