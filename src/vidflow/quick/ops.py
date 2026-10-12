@@ -6,7 +6,7 @@ from pathlib import Path
 
 from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
-from vidflow.quick.chars import check_known, lookup, parse_refs
+from vidflow.quick.chars import CharRef, check_known, lookup, parse_refs
 from vidflow.quick.model import (IMAGE_EXTS, STAGES, Beat, Beats, Idea, QuickProject, Review, image_name,
                                  load_beats, load_quick, require_beats, save_beats, save_quick)
 from vidflow.quick.preset import Preset, load_preset
@@ -230,16 +230,46 @@ def beat_file(beat: Beat) -> str | None:
     return None if beat.start is None else f"images/{image_name(beat.n, beat.start)}.jpg"
 
 
+def image_block(beat: Beat, prev: Beat | None, known: dict[str, CharRef]) -> str | None:
+    """Lý do mốc chưa gen ảnh được (None = được): thiếu ảnh nhân vật, hoặc nối cảnh mà mốc trước chưa có ảnh."""
+    missing = [r for r in beat.refs if r not in known or known[r].image is None]
+    if missing:
+        return "thiếu ảnh " + ", ".join("@" + r for r in missing)
+    if beat.cont and not (prev and prev.image and prev.status == "ok"):
+        return f"chờ ảnh mốc {prev.n if prev else beat.n - 1}"
+    return None
+
+
+def _wants_image(b: Beat) -> bool:
+    return (b.status in ("pending", "redo") and bool(b.prompt) and b.review is not None
+            and b.review.verdict in PASSING and b.start is not None and not b.error)
+
+
 def list_beats(root: Path, *, todo: bool = False) -> dict:
-    """todo=True: chỉ mốc cần gen ảnh (pending/redo, prompt đã đạt kiểm duyệt, đã có thời gian)."""
+    """todo=True: chỉ mốc cần gen ảnh và gen được ngay; mốc bị chặn vào `blocked`; kèm `attach` (ảnh đính khi gen)."""
+    root = Path(root)
     beats = require_beats(root)
-    rows = []
+    known = lookup(root)
+    rows, blocked = [], []
+    prev: Beat | None = None
     for b in beats.beats:
-        if todo and not (b.status in ("pending", "redo") and b.prompt and b.review
-                         and b.review.verdict in PASSING and b.start is not None):
-            continue
-        rows.append({**b.model_dump(), "file": beat_file(b)})
-    return {"aspect": beats.aspect, "beats": rows}
+        reason = None if b.status == "ok" else image_block(b, prev, known)
+        before, prev = prev, b
+        if todo:
+            if not _wants_image(b):
+                continue
+            if reason:
+                blocked.append({"n": b.n, "reason": reason})
+                continue
+        row = {**b.model_dump(), "file": beat_file(b), "blocked": reason}
+        if todo:
+            row["attach"] = ([str(known[r].image.resolve()) for r in b.refs]
+                             + ([str((root / before.image).resolve())] if b.cont else []))
+        rows.append(row)
+    out = {"aspect": beats.aspect, "beats": rows}
+    if todo:
+        out["blocked"] = blocked
+    return out
 
 
 def status_summary(root: Path) -> dict:
@@ -249,6 +279,14 @@ def status_summary(root: Path) -> dict:
     q = load_quick(root)
     beats = load_beats(root)
     bl = beats.beats if beats else []
+    known = lookup(root, q) if bl else {}
+    blocked, prev = 0, None
+    for b in bl:
+        if _wants_image(b) and image_block(b, prev, known):
+            blocked += 1
+        prev = b
+    referenced = {r for b in bl for r in b.refs}
+    chars_missing = sorted(r for r in referenced if r in known and known[r].image is None)
     voice = root / VOICE_FILE
     try:
         voice_s = round(wav_duration(voice), 3) if voice.is_file() else None
@@ -269,6 +307,12 @@ def status_summary(root: Path) -> dict:
             "pending": sum(1 for b in bl if b.status == "pending"),
         },
         "voice_s": voice_s,
+        "blocked": blocked,
+        "errors": sum(1 for b in bl if b.error),
+        "chars_missing": chars_missing,
+        "clips": {"max": q.max_clips, "enabled": sum(1 for b in bl if b.clip.enabled),
+                  "ok": sum(1 for b in bl if b.clip.status == "ok"),
+                  "error": sum(1 for b in bl if b.clip.status == "error")},
     }
 
 
@@ -278,6 +322,12 @@ def format_status(s: dict) -> str:
              f"Ý tưởng: {s['ideas']}" + (f" · đã chọn #{s['picked']}: {s['picked_title']}" if s["picked"] else ""),
              f"{b['total']} mốc · đã đọc {b['voiced']} · prompt đạt {b['prompted']} (trượt {b['prompt_fail']}) · "
              f"có ảnh {b['imaged']} · gen lại {b['redo']}"]
+    if s["blocked"] or s["errors"]:
+        miss = f" · thiếu ảnh nhân vật: {', '.join('@' + c for c in s['chars_missing'])}" if s["chars_missing"] else ""
+        lines.append(f"Bị chặn: {s['blocked']} mốc · lỗi Flow: {s['errors']} mốc{miss}")
+    c = s["clips"]
+    if c["enabled"]:
+        lines.append(f"Clip: {c['ok']}/{c['enabled']} xong (tối đa {c['max']}) · lỗi {c['error']}")
     if s["voice_s"] is not None:
         m, sec = divmod(s["voice_s"], 60)
         lines.append(f"Giọng đọc: {int(m)}:{sec:05.2f}")

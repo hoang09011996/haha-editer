@@ -151,6 +151,8 @@ def beats(project: ProjectOpt, json_out: Annotated[bool, typer.Option("--json")]
         t = "--:--" if b["start"] is None else f"{int(b['start'] // 60):02d}:{int(b['start'] % 60):02d}"
         v = b["review"]["verdict"] if b["review"] else "-"
         typer.echo(f"{b['n']:03d} [{t}] {b['status']:<7} {v:<5} {b['text'][:60]}")
+    for x in data.get("blocked", []):
+        typer.echo(f"{x['n']:03d} BỊ CHẶN: {x['reason']}")
 
 
 @_cmd(quick_app, "build")
