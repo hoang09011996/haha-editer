@@ -59,3 +59,18 @@ def test_no_emoji_in_ui():
 def test_js_syntax(js):
     r = subprocess.run(["node", "--check", str(STATIC / js)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_savebar_space_reserved():
+    css, js = _read("style.css"), _read("app.js")
+    assert "body.has-savebar .rail{height:calc(100vh - 64px)}" in css
+    assert "body.has-savebar .assistant" in css and "max-height:calc(100vh - 64px)" in css
+    assert 'document.body.classList.toggle("has-savebar"' in js
+
+
+def test_job_state_text_shared_and_no_double_step_number():
+    js = _read("app.js")
+    assert js.count("function jobStateText(") == 1
+    assert "jobStateText(S.job.state)" in js and "jobStateText(j.state)" in js
+    assert "}, S.job.state)" not in js
+    assert 'class: "f7n" }, `${i + 1}.' not in js

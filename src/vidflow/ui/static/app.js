@@ -232,13 +232,14 @@ function setCurrent(eyebrow, title, meta) {
 }
 function render() {
   document.getElementById("savebar").hidden = !S.name;
+  document.body.classList.toggle("has-savebar", !!S.name);
   const shell = document.getElementById("main"), nav = document.getElementById("railNav");
   if (!S.name || !S.data) { shell.className = "home"; nav.replaceChildren(); setCurrent(); shell.replaceChildren(renderHome()); return; }
   shell.className = "app";
   const step = STEPS.find(s => s.id === S.step) || STEPS[0];
   const view = { idea: vIdea, cast: vCast, story: vStory, shots: vShots, voice: vVoice, video: vVideo, build: vBuild }[step.id]();
   const sc = S.data.script;
-  setCurrent("Video chi tiết", sc.title, `${(sc.scenes || []).length} cảnh · ${sc.aspect}`);
+  setCurrent("Video chi tiết", sc.title, `${(sc.scenes || []).length} cảnh · ${sc.aspect || ""}`);
   nav.replaceChildren(renderSidebar());
   shell.replaceChildren(h("section", { class: "content" }, h("h2", { class: "ptitle" }, sc.title), guide(step), view, stepNav(step)), renderAssistant());
 }
@@ -266,7 +267,7 @@ function renderHome() {
   return h("div", { class: "hero" },
     h("h2", { class: "hero-title" }, "Làm video AI trong 7 bước"),
     h("p", { class: "hero-sub" }, "Bạn đưa ý tưởng — AI viết kịch bản chi tiết, prompt chống “chất AI”, giọng đọc; Google Flow gen clip bằng tín dụng gói; vidflow dựng sẵn draft CapCut."),
-    h("div", { class: "flow7" }, STEPS.map((s, i) => h("div", { class: "f7" }, h("div", { class: "f7i" }, String(i + 1)), h("div", { class: "f7n" }, `${i + 1}. ${s.title}`)))),
+    h("div", { class: "flow7" }, STEPS.map((s, i) => h("div", { class: "f7" }, h("div", { class: "f7i" }, String(i + 1)), h("div", { class: "f7n" }, s.title)))),
     h("h3", { class: "sec" }, "Bắt đầu nhanh từ mẫu"),
     h("div", { class: "tpls" }, TEMPLATES.map(t => h("button", { class: "tpl", onclick: () => openNew(t) }, h("b", {}, t.title), h("p", {}, t.idea)))),
     h("div", { class: "row center", style: "margin-top:18px" }, h("button", { class: "primary big", onclick: () => openNew() }, "+ Tự nhập ý tưởng")),
@@ -547,7 +548,7 @@ function renderAssistant() {
     h("p", { class: "hint" }, "AI sửa trực tiếp kịch bản (bỏ qua phần đã khóa). Lưu trước khi gửi."),
     h("div", { class: "chips col" }, quick.map(q => h("button", { class: "chip", onclick: () => { ask.value = q; } }, q))), ask,
     h("button", { class: "primary wide-btn", disabled: S.job?.state === "running", onclick: () => { if (!ask.value.trim()) return toast("Nhập yêu cầu", true); runJob("assist", null, ask.value.trim()); } }, "Gửi cho AI")));
-  if (S.job) box.append(h("div", { class: "as-card" }, h("div", { class: "as-field" }, `${S.job.label}`, h("span", { class: "badge " + (S.job.state === "done" ? "ok" : S.job.state === "failed" ? "err" : "stale") }, S.job.state)),
+  if (S.job) box.append(h("div", { class: "as-card" }, h("div", { class: "as-field" }, `${S.job.label}`, h("span", { class: "badge " + (S.job.state === "done" ? "ok" : S.job.state === "failed" ? "err" : "stale") }, jobStateText(S.job.state))),
     h("pre", { class: "log", id: "log" }, S.job.log || "(đang chạy…)")));
   return box;
 }
@@ -590,6 +591,8 @@ async function runJob(kind, scenes = null, instruction = "") {
     toast(`Bắt đầu: ${S.job.label}`); render(); startPolling();
   } catch (e) { toast(e.message, true); }
 }
+const JOB_STATE_TEXT = { running: "Đang chạy", done: "Xong", failed: "Lỗi", stopped: "Đã dừng" };
+function jobStateText(state) { return JOB_STATE_TEXT[state] || "Rảnh"; }
 function startPolling() {
   clearInterval(S.poll);
   S.poll = setInterval(async () => {
@@ -597,7 +600,8 @@ function startPolling() {
     S.job = j.state === "idle" ? null : j;
     const pill = document.getElementById("jobPill");
     pill.className = "pill " + (j.state || "");
-    pill.textContent = j.state === "running" ? `Đang chạy: ${j.label}` : j.state === "done" ? `Xong: ${j.label}` : j.state === "failed" ? `Lỗi: ${j.label}` : j.state === "stopped" ? `Đã dừng: ${j.label}` : "Rảnh";
+    const st = jobStateText(j.state);
+    pill.textContent = j.state in JOB_STATE_TEXT ? `${st}: ${j.label}` : st;
     const log = document.getElementById("log");
     if (log && j.log !== undefined) { const end = log.scrollTop + log.clientHeight >= log.scrollHeight - 20; log.textContent = j.log || "(đang chạy…)"; if (end) log.scrollTop = log.scrollHeight; }
     if (j.state !== "running") {

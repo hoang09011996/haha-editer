@@ -60,6 +60,11 @@ main.app{display:grid;grid-template-columns:minmax(0,1fr) 360px;align-items:star
 main.app.single{grid-template-columns:minmax(0,1fr)}
 main.app>.content{padding:20px 24px;min-width:0}
 .assistant,.panel{position:sticky;top:0;max-height:100vh;min-height:100vh;overflow:auto;padding:18px 20px;background:var(--surface);border-left:1px solid var(--line)}
+/* thanh Lưu (~61px) dính đáy: chừa chỗ để không che chân thanh trái và đáy khung phải */
+@media (min-width:901px){
+  body.has-savebar .rail{height:calc(100vh - 64px)}
+  body.has-savebar .assistant,body.has-savebar .panel{max-height:calc(100vh - 64px);min-height:calc(100vh - 64px)}
+}
 @media (max-width:900px){
   .shell{grid-template-columns:1fr}
   .rail{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}
