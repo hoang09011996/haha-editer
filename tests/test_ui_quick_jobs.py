@@ -208,3 +208,24 @@ def test_exit3_not_quota_for_full_pipeline_job(tmp_path):
     job = FullRunner().start("build", "vid", tmp_path / "vid")
     job.proc.wait()
     assert job.state == "failed" and job.to_dict()["quota_exhausted"] is False
+
+
+def test_start_launch_failure_closes_log_and_raises(qroot, monkeypatch):
+    import builtins
+
+    import vidflow.ui.jobs as uj
+    from vidflow.ui.jobs import JobLaunchError
+
+    opened = []
+
+    def spy_open(*a, **kw):
+        f = builtins.open(*a, **kw)
+        opened.append(f)
+        return f
+
+    monkeypatch.setattr(uj, "open", spy_open, raising=False)
+    r = CmdRunner([str(qroot / "khong-co" / "claude")])
+    with pytest.raises(JobLaunchError, match="Không chạy được lệnh"):
+        r.start("voice", "vid", qroot, quick=True)
+    assert opened and all(f.closed for f in opened)
+    assert r.current is None and r.busy() is False

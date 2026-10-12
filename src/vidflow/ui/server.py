@@ -17,7 +17,7 @@ from vidflow.project import Project, create_project
 from vidflow.schema import FlowSettings, Script
 from vidflow.status import scene_rows
 from vidflow.ui.auth import Auth
-from vidflow.ui.jobs import KINDS, JobRunner, ReviewRunner
+from vidflow.ui.jobs import KINDS, JobLaunchError, JobRunner, ReviewRunner
 from vidflow.ui.quick_api import quick_router
 from vidflow.ui.suggest import Suggester
 
@@ -198,6 +198,8 @@ def create_app(projects_root: Path, runner: JobRunner | None = None, config_path
             raise HTTPException(422, f"Việc không hỗ trợ: {req.kind}")
         try:
             job = runner.start(req.kind, name, p.root, req.scenes, req.instruction)
+        except JobLaunchError as e:
+            raise HTTPException(503, str(e))
         except RuntimeError as e:
             raise HTTPException(409, str(e))
         except ValueError as e:

@@ -24,7 +24,7 @@ from vidflow.quick.chars import CharRef, char_rows, lookup
 from vidflow.quick.jobs import review_cmd
 from vidflow.quick.model import CHAR_ID, IMAGE_EXTS, create_quick, is_quick, load_beats, load_quick, require_beats
 from vidflow.quick.preset import ID_RE, channel_refs_dir, list_presets, load_preset
-from vidflow.ui.jobs import JobRunner, ReviewRunner
+from vidflow.ui.jobs import JobLaunchError, JobRunner, ReviewRunner
 from vidflow.ui.quick_jobs import check_quick_job
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
@@ -297,6 +297,8 @@ def quick_router(projects_root: Path, runner: JobRunner, reviews: ReviewRunner) 
         đang bận → 409."""
         try:
             return runner.start(kind, name, root, quick=True, **kw)
+        except JobLaunchError as e:
+            raise HTTPException(503, str(e))
         except RuntimeError as e:
             raise HTTPException(409, str(e))
         except (ValueError, VidflowError) as e:

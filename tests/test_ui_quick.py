@@ -12,7 +12,7 @@ from vidflow.quick import chars, ops
 from vidflow.errors import VidflowError
 from vidflow.quick.model import create_quick, load_beats, load_quick
 from vidflow.quick.preset import load_preset
-from vidflow.ui.jobs import JobRunner, ReviewRunner
+from vidflow.ui.jobs import JobLaunchError, JobRunner, ReviewRunner
 from vidflow.ui.quick_api import beat_state, media_url
 from vidflow.ui.server import create_app
 
@@ -308,7 +308,8 @@ def test_jobs_validation_and_options(env):
 
 
 @pytest.mark.parametrize("exc,code", [(ValueError("Nguồn gen sai"), 400), (VidflowError("quick.yaml hỏng"), 400),
-                                      (RuntimeError("Đang chạy: X"), 409)])
+                                      (RuntimeError("Đang chạy: X"), 409),
+                                      (JobLaunchError("Không chạy được lệnh: claude (No such file)"), 503)])
 def test_jobs_maps_runner_start_errors(env, monkeypatch, exc, code):
     def boom(*a, **kw):
         raise exc
@@ -585,3 +586,11 @@ def test_waveform_broken_wav_is_422(env):
     (env.root / "audio" / "voice.wav").write_bytes(b"RIFF\x00\x00garbage")
     r = env.c.get("/api/quick/vid/waveform")
     assert r.status_code == 422 and "hỏng" in r.json()["detail"]
+
+
+def test_jobs_launch_failure_is_clean_error(env):
+    env.runner.cmd = [str(env.tmp / "khong-co-claude")]
+    r = env.c.post("/api/quick/vid/jobs", json={"kind": "voice"})
+    assert r.status_code == 503 and r.json()["detail"].startswith("Không chạy được lệnh:")
+    env.runner.cmd = [sys.executable, "-c", "print('ok')"]
+    assert env.c.post("/api/quick/vid/jobs", json={"kind": "voice"}).status_code == 202  # không kẹt trạng thái bận

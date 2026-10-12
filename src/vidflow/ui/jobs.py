@@ -139,6 +139,10 @@ class Job:
                 "quota_exhausted": self.quota_exhausted}
 
 
+class JobLaunchError(Exception):
+    """Không khởi chạy được tiến trình của job (lệnh không tồn tại / không chạy được) — API trả 503."""
+
+
 class JobRunner:
     def __init__(self):
         self._lock = threading.Lock()
@@ -178,8 +182,12 @@ class JobRunner:
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             log_path = logs / f"job-{stamp}-{kind}.log"
             f = open(log_path, "w", encoding="utf-8")
-            proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                    start_new_session=True)  # nhóm tiến trình riêng để dừng cả tiến trình con
+            try:
+                proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                        start_new_session=True)  # nhóm tiến trình riêng để dừng cả tiến trình con
+            except OSError as e:  # vd. `claude` không có trên PATH
+                f.close()
+                raise JobLaunchError(f"Không chạy được lệnh: {cmd[0]} ({e.strerror or e})") from e
             self.current = Job(kind, project, log_path, proc, stamp, scenes, f, label=label,
                                provider=provider or "", root=project_root)
             return self.current
@@ -223,8 +231,11 @@ class ReviewRunner:
         with self._lock:
             # nhóm tiến trình riêng: quá giờ thì diệt cả tiến trình con (Bash của claude chạy `set-review`...),
             # tránh chúng ghi beats.json sau khi đã trả 504 hoặc chồng lên lần kiểm duyệt sau
-            proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                    stdin=subprocess.DEVNULL, start_new_session=True)
+            try:
+                proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                        stdin=subprocess.DEVNULL, start_new_session=True)
+            except OSError as e:
+                return 127, f"Không chạy được lệnh: {cmd[0]} ({e.strerror or e})"
             try:
                 out, err = proc.communicate(timeout=self.timeout)
             except subprocess.TimeoutExpired:
