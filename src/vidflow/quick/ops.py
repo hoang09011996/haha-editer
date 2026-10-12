@@ -6,11 +6,10 @@ from pathlib import Path
 
 from vidflow.errors import VidflowError
 from vidflow.media import wav_duration
-from vidflow.quick.model import (STAGES, Beat, Beats, Idea, QuickProject, Review, image_name, load_beats,
-                                 load_quick, require_beats, save_beats, save_quick)
+from vidflow.quick.model import (IMAGE_EXTS, STAGES, Beat, Beats, Idea, QuickProject, Review, image_name,
+                                 load_beats, load_quick, require_beats, save_beats, save_quick)
 from vidflow.quick.preset import Preset, load_preset
 
-IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png", ".webp": ".webp"}
 PASSING = ("pass", "override")
 VOICE_FILE = "audio/voice.wav"
 

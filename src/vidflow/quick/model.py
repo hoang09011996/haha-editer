@@ -6,14 +6,17 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from vidflow.errors import VidflowError
 from vidflow.state import atomic_write_text
 
 QUICK_FILE = "quick.yaml"
 BEATS_FILE = "beats.json"
-SUBDIRS = ("images", "audio", "audio/beats", "logs", "tmp")
+SUBDIRS = ("images", "clips", "refs", "out", "audio", "audio/beats", "logs", "tmp")
+IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png", ".webp": ".webp"}
+VIDEO_EXTS = {".mp4": ".mp4", ".mov": ".mov", ".webm": ".webm"}
+CHAR_ID = r"^[A-Z][A-Z0-9_]{1,23}$"
 Stage = Literal["new", "ideas", "picked", "script", "voiced", "prompted", "imaged", "built"]
 STAGES: tuple[str, ...] = Stage.__args__
 
@@ -24,12 +27,31 @@ class Idea(BaseModel):
     why_viral: str = ""
 
 
+class Character(BaseModel):
+    """Nhân vật @ID. Ảnh sheet tìm theo quy ước: refs/<ID>.png|jpg|webp (xem quick/chars.py)."""
+    id: str = Field(pattern=CHAR_ID)
+    name: str = ""
+    desc: str
+    color: str = ""
+
+
+class FlowSettings(BaseModel):
+    image_model: str = "Nano Banana 2"
+    video_model: str = ""  # bắt buộc chọn trước khi gen clip
+    resolution: Literal["720p", "1080p"] = "720p"
+
+
 class QuickProject(BaseModel):
     preset: str
     title: str = ""
     ideas: list[Idea] = []
     picked: int | None = None  # 1-based
     stage: Stage = "new"
+    characters: list[Character] = []
+    channel_chars: list[str] | None = None  # None = dùng mọi nhân vật của bộ kênh
+    flow: FlowSettings = Field(default_factory=FlowSettings)
+    max_clips: int = Field(default=12, ge=0)
+    allow_cont: bool = True
 
     def picked_idea(self) -> Idea | None:
         if self.picked and 1 <= self.picked <= len(self.ideas):
@@ -43,6 +65,15 @@ class Review(BaseModel):
     issues: list[str] = []
 
 
+class Clip(BaseModel):
+    enabled: bool = False
+    prompt: str = ""
+    review: Review | None = None
+    file: str | None = None  # clips/NNN_MM-SS.mp4
+    status: Literal["pending", "ok", "redo", "error"] = "pending"
+    error: str = ""
+
+
 class Beat(BaseModel):
     n: int
     start: float | None = None
@@ -52,6 +83,10 @@ class Beat(BaseModel):
     image: str | None = None
     review: Review | None = None
     status: Literal["pending", "ok", "redo"] = "pending"
+    refs: list[str] = []  # @ID trong prompt ảnh — CLI tự tách, agent không khai
+    cont: bool = False    # nối cảnh: đính ảnh mốc liền trước khi gen
+    clip: Clip = Field(default_factory=Clip)
+    error: str = ""       # lý do Flow từ chối ảnh gần nhất (rỗng = không lỗi)
 
 
 class Beats(BaseModel):
