@@ -398,3 +398,54 @@ async function qToggleClip(n, on) {
   await qRefresh(name);
 }
 QSCREENS.board = qBoard;
+
+// ================= Nhân vật =================
+function qChars() {
+  const d = Q.data;
+  const group = (scope, title, sub, empty) => {
+    const list = d.characters.filter(c => c.scope === scope);
+    return h("section", { class: "char-group" },
+      h("div", { class: "scene-h" }, h("h2", {}, title), h("span", { class: "muted" }, sub), h("span", { class: "rule" })),
+      list.length ? h("div", { class: "chars-grid" }, list.map(qCharCard)) : h("p", { class: "hint" }, empty));
+  };
+  return [h("section", { class: "content" },
+    h("header", { class: "qhead" }, h("div", {}, h("h1", {}, "Nhân vật"),
+      h("p", { class: "hint" }, "Prompt nhắc ", h("span", { class: "mono" }, "@TÊN"), " thì ảnh nhân vật đó được đính kèm khi gen trong Flow. Nhân vật chưa có ảnh sẽ chặn các mốc dùng nó."))),
+    group("channel", "Của bộ kênh", `${d.preset.name} — dùng lại ở mọi video`, "Bộ kênh chưa có nhân vật, hoặc video này không dùng."),
+    group("video", "Riêng video này", "AI đề xuất từ kịch bản, bạn duyệt trước khi gen ảnh mốc", "Chưa có — AI đề xuất sau bước kịch bản.")), null];
+}
+function qCharCard(c) {
+  const busy = S.job?.state === "running", missing = !c.image_url;
+  const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", hidden: true, "aria-label": `Ảnh @${c.id}` });
+  file.onchange = () => { const f = file.files[0]; file.value = ""; if (f) qUpload(c.id, f); };
+  return h("article", { class: "char-card" + (missing ? " missing" : "") },
+    missing ? h("div", { class: "missing-box" }, h("strong", {}, "Chưa có character sheet"),
+      h("span", {}, c.blocked ? `${c.blocked} mốc đang bị chặn gen` : "Chưa mốc nào bị chặn"))
+      : h("img", { class: "sheet", src: c.image_url, alt: `Character sheet @${c.id}` }),
+    h("div", { class: "char-body" },
+      h("div", { class: "char-h" }, h("span", { class: "swatch", style: `background:${qColor(c.color, "var(--muted)")}` }), h("span", { class: "mono cid" }, "@" + c.id),
+        c.name ? h("span", { class: "muted" }, c.name) : null, h("span", { class: "grow" }), h("span", { class: "mono muted" }, `${c.uses} mốc`)),
+      h("p", { class: "char-desc" }, c.desc || ""),
+      h("div", { class: "row" }, file,
+        missing ? h("button", { class: "primary small", disabled: busy, onclick: () => qJob("sheets") }, `Gen sheet (${provLabel(qProvider("sheets"))})`) : null,
+        h("button", { class: "small", onclick: () => file.click() }, missing ? "Tải ảnh lên" : "Thay ảnh"),
+        c.scope === "video" ? h("button", { class: "small", onclick: () => qPromote(c.id) }, "Đưa vào bộ kênh") : null)));
+}
+async function qUpload(id, f) {
+  const name = Q.name, fd = new FormData(); fd.append("file", f);
+  try { // multipart: không qua api() (api() đặt Content-Type JSON)
+    const r = await fetch(`/api/quick/${name}/chars/${id}/image`, { method: "POST", body: fd });
+    if (r.status === 401) { location.href = "/login"; return; }
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof body.detail === "string" && body.detail ? body.detail : `Lỗi ${r.status}`);
+    qSay(name, `Đã gắn ảnh @${id}`);
+  } catch (e) { qSay(name, e.message, true); }
+  await qRefresh(name);
+}
+async function qPromote(id) {
+  const name = Q.name;
+  if (!confirm(`Đưa @${id} vào bộ kênh? Mọi video sau của kênh dùng được nhân vật này.`)) return;
+  try { await qPost(`/chars/${id}/promote`, {}, name); qSay(name, `@${id} đã vào bộ kênh`); } catch (e) { qSay(name, e.message, true); }
+  await qRefresh(name);
+}
+QSCREENS.chars = qChars;

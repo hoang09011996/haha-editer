@@ -100,3 +100,14 @@ def test_quick_async_actions_guarded_against_screen_switch():
     assert retry.index("qConfirmGen(kind)") < retry.index('"/retry"')  # hỏi trước khi xóa lỗi
     assert "/^#[0-9A-Fa-f]{6}$/" in js and 'qColor(qChar(id)?.color, "#4A4F6E")' in js
     assert "keepPanel: Q.sel !== n" in js
+
+
+def test_quick_chars_screen_registered():
+    js = _read("quick.js")
+    assert "QSCREENS.chars = qChars" in js and 'qJob("sheets")' in js and "Đưa vào bộ kênh" in js
+    assert "Gen sheet (${provLabel(qProvider(\"sheets\"))})" in js
+    for fn in ("qUpload", "qPromote"):
+        body = js[js.index(f"async function {fn}("):]
+        body = body[: body.index("\n}\n")]
+        assert "const name = Q.name" in body and "toast(e.message" not in body and "qRefresh(name)" in body, fn
+    assert 'qColor(c.color, "var(--muted)")' in js  # màu nhân vật vào style chỉ khi #RRGGBB

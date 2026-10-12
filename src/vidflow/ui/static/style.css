@@ -266,3 +266,15 @@ details.joblog{margin-top:22px}
 .notice.err{background:var(--error-bg);color:var(--error-text)}.notice.warn{background:var(--warn-bg);color:var(--warn)}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 .actions button{min-height:44px}
+
+/* ===== Quy trình nhanh — Nhân vật ===== */
+.char-group{margin-bottom:26px}
+.chars-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.char-card{display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:var(--surface);border:1px solid var(--line)}
+.char-card.missing{border-color:var(--warn-line)}
+.sheet{width:100%;aspect-ratio:16/9;object-fit:contain;background:#fff;border-bottom:1px solid var(--line)}
+.missing-box{aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px;text-align:center;background:var(--warn-bg);color:var(--warn)}
+.char-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.char-h{display:flex;align-items:center;gap:8px}
+.cid{font-weight:600}
+.char-desc{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
