@@ -11,6 +11,7 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from vidflow.errors import VidflowError
+from vidflow.quick.model import Character
 from vidflow.state import atomic_write_text
 
 REPO = Path(__file__).resolve().parents[3]
@@ -32,11 +33,18 @@ class Preset(BaseModel):
     style_anchor_end: str
     voice: PresetVoice = PresetVoice()
     language: str = "vi"
+    characters: list[Character] = []
+    logo: str = ""  # đường dẫn logo kênh (tương đối repo), dùng khi xuất MP4
 
 
 def brief_path(p: Preset) -> Path:
     path = Path(p.brief_file).expanduser()
     return path if path.is_absolute() else REPO / path
+
+
+def channel_refs_dir(p: Preset) -> Path:
+    """Thư mục ảnh sheet nhân vật của bộ kênh: presets/refs/<preset-id>/<ID>.png|jpg|webp."""
+    return _dir(None) / "refs" / p.id
 
 
 def _dir(presets_dir: Path | None) -> Path:

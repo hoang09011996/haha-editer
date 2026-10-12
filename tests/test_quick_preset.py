@@ -101,3 +101,16 @@ def test_import_docx_uses_converter(tmp_path):
     assert calls == [src]
     assert brief_path(p).read_text(encoding="utf-8") == BRIEF
     assert brief_path(p).suffix == ".txt"
+
+
+def test_preset_characters_and_channel_refs_dir(quick_presets):
+    from vidflow.quick.preset import channel_refs_dir, load_preset
+    p = load_preset("doodle-giai-ma")
+    assert [c.id for c in p.characters] == ["MODERNYOU"]
+    assert p.logo == ""
+    assert channel_refs_dir(p) == quick_presets / "refs" / "doodle-giai-ma"
+
+
+def test_real_preset_without_characters_loads():
+    from vidflow.quick.preset import load_preset
+    assert load_preset("doodle-giai-ma").characters == []
