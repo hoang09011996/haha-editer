@@ -46,6 +46,18 @@ def test_set_chars_validation(qroot):
         chars.set_chars(qroot, [{"id": "farmer", "desc": "x"}])
 
 
+@pytest.mark.parametrize("color", ["red", "#FFF", "#12345G", "#123456;background:url(x)", "#123456\n", "url(x)"])
+def test_set_chars_rejects_bad_color(qroot, color):
+    with pytest.raises(VidflowError, match="Màu nhân vật"):
+        chars.set_chars(qroot, [{**FARMER, "color": color}])
+    assert load_quick(qroot).characters == []
+
+
+def test_set_chars_accepts_hex_or_empty_color(qroot):
+    q = chars.set_chars(qroot, [{**FARMER, "color": "#8B5E3C"}, {"id": "ANCESTOR", "desc": "x", "color": ""}])
+    assert [c.color for c in q.characters] == ["#8B5E3C", ""]
+
+
 def test_set_chars_refuses_removing_char_in_use(qroot, P):
     chars.set_chars(qroot, [FARMER])
     ops.set_prompts(qroot, [{"n": 1, "prompt": P("@FARMER digging"), "verdict": "pass", "score": 8}])

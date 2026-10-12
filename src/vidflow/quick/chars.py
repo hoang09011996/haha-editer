@@ -13,6 +13,7 @@ from vidflow.quick.preset import Preset, channel_refs_dir, load_preset, save_pre
 
 REF_RE = re.compile(r"@([A-Za-z][A-Za-z0-9_]*)")
 VIDEO_REFS = "refs"
+COLOR_RE = re.compile(r"#[0-9A-Fa-f]{6}")
 
 
 @dataclass
@@ -83,6 +84,9 @@ def set_chars(root: Path, items: list[dict]) -> QuickProject:
         new = [Character.model_validate(i) for i in items]
     except Exception as e:
         raise VidflowError(f"Nhân vật không hợp lệ (id IN HOA 2–24 ký tự A-Z0-9_, cần desc): {e}") from e
+    bad = [c.id for c in new if c.color and not COLOR_RE.fullmatch(c.color)]
+    if bad:  # màu đi thẳng vào style của UI: chỉ nhận #RRGGBB
+        raise VidflowError(f"Màu nhân vật phải dạng #RRGGBB hoặc để trống: {', '.join('@' + i for i in bad)}")
     ids = [c.id for c in new]
     dup = sorted({i for i in ids if ids.count(i) > 1})
     if dup:

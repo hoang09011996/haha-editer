@@ -83,3 +83,20 @@ def test_quick_script_loaded_after_app():
     assert "QSCREENS.board = qBoard" in js and "Lưu & kiểm duyệt" in js and "Duyệt tay" in js
     assert "qQuotaBanner" in js and "Nguồn: theo cài đặt" in js and "provider:" in js
     assert "j.quota_exhausted" in _read("app.js")
+
+
+def test_quick_async_actions_guarded_against_screen_switch():
+    """Phản hồi chậm (kiểm duyệt tới 300 s) về sau khi đã chuyển video/trang chủ: không vẽ đè, không toast, không gọi sai video."""
+    js = _read("quick.js")
+    assert 'function qActive(name = Q.name) { return S.kind === "quick" && S.name === name && Q.name === name; }' in js
+    assert "if (!d || !qActive()) return;" in js  # Q.render
+    assert "async function qPost(path, body, name = Q.name)" in js
+    for fn in ("qSaveReview", "qOverride", "qRedo", "qToggleClip", "qPick", "qStop", "qRetryErrors", "qJob"):
+        body = js[js.index(f"async function {fn}("):]
+        body = body[: body.index("\n}\n")]
+        assert "const name = Q.name" in body, fn
+        assert "toast(e.message" not in body, fn  # lỗi qua qSay(name, …)
+    retry = js[js.index("async function qRetryErrors("):]
+    assert retry.index("qConfirmGen(kind)") < retry.index('"/retry"')  # hỏi trước khi xóa lỗi
+    assert "/^#[0-9A-Fa-f]{6}$/" in js and 'qColor(qChar(id)?.color, "#4A4F6E")' in js
+    assert "keepPanel: Q.sel !== n" in js

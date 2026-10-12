@@ -33,18 +33,33 @@ function fmtT1(s) { s = Math.max(0, s || 0); const m = Math.floor(s / 60); retur
 function pad3(n) { return String(n).padStart(3, "0"); }
 function qBeat(n) { return (Q.data?.beats || []).find(b => b.n === n) || null; }
 function qChar(id) { return (Q.data?.characters || []).find(c => c.id === id) || null; }
-async function qPost(path, body) { return api(`/api/quick/${Q.name}${path}`, { method: "POST", body: JSON.stringify(body || {}) }); }
-async function qReload() { Q.data = await api(`/api/quick/${Q.name}`); if (Q.data.job) S.job = Q.data.job; }
-async function qRefresh() { try { await qReload(); } catch (e) { toast(e.message, true); } Q.render(); } // sau mỗi thao tác: tải lại, lỗi → toast
+// video nhanh `name` còn đang mở? Phản hồi chậm (kiểm duyệt tới 300 s) về sau khi người dùng đã chuyển video/trang chủ
+// thì bỏ qua: không vẽ đè #main, không toast, không gọi API theo tên mới.
+function qActive(name = Q.name) { return S.kind === "quick" && S.name === name && Q.name === name; }
+function qSay(name, msg, err = false) { if (qActive(name)) toast(msg, err); }
+async function qPost(path, body, name = Q.name) { return api(`/api/quick/${name}${path}`, { method: "POST", body: JSON.stringify(body || {}) }); }
+async function qReload() {
+  const name = Q.name, d = await api(`/api/quick/${name}`);
+  if (Q.name !== name) return; // đã mở video khác trong lúc chờ
+  Q.data = d; if (d.job) S.job = d.job;
+}
+// sau mỗi thao tác: tải lại + vẽ lại nếu video `name` còn mở; lỗi tải → toast
+async function qRefresh(name, opts = {}) {
+  if (!qActive(name)) return;
+  try { await qReload(); } catch (e) { qSay(name, e.message, true); }
+  if (qActive(name)) Q.render(opts);
+}
+function qColor(c, fallback) { return typeof c === "string" && /^#[0-9A-Fa-f]{6}$/.test(c) ? c : fallback; } // màu vào style: chỉ #RRGGBB
 function provLabel(p) { return (PROVIDERS.find(x => x[0] === p) || [p, p || "Flow"])[1]; }
 // nguồn gen cho việc gen: ô "Nguồn" (ghi đè một lần) hoặc cài đặt video (ảnh/sheet: image_provider; clip: video_provider)
 function qProvider(kind) { const f = Q.data.quick.flow; return Q.provider || (kind === "clips" ? f.video_provider : f.image_provider) || "flow"; }
 
 // ================= mở / vẽ =================
 Q.open = async function (name) {
-  if (Q.name !== name) Object.assign(Q, { name, screen: "board", filter: "all", sel: null, fresh: true, drafts: {}, reviewing: {} });
+  if (Q.name !== name) Object.assign(Q, { name, data: null, screen: "board", filter: "all", sel: null, fresh: true, drafts: {}, reviewing: {} });
   Q.wave = null;
-  try { await qReload(); } catch (e) { toast(e.message, true); return; }
+  try { await qReload(); } catch (e) { qSay(name, e.message, true); return; }
+  if (!qActive(name)) return;
   if (Q.fresh) { Q.sel = Q.data.beats.length ? Q.data.beats[0].n : null; Q.fresh = false; }
   if (Q.sel != null && !qBeat(Q.sel)) Q.sel = Q.data.beats.length ? Q.data.beats[0].n : null;
   Q.render();
@@ -60,17 +75,22 @@ function qAutoRefresh() {
   }, 5000);
 }
 Q.render = function (opts = {}) {
-  const d = Q.data; if (!d) return;
+  const d = Q.data; if (!d || !qActive()) return; // không vẽ đè khi đang mở video chi tiết / trang chủ
   document.getElementById("savebar").hidden = true; document.body.classList.remove("has-savebar");
   const main = document.getElementById("main");
   const oldPanel = opts.keepPanel ? main.querySelector(".panel") : null;
   const keep = oldPanel && oldPanel.contains(document.activeElement) ? oldPanel : null; // đang gõ trong khung phải → giữ nguyên
+  // vẽ lại khung phải trong lúc đang gõ (vd. kết quả kiểm duyệt cùng mốc): nhớ ô + con trỏ để trả lại sau khi vẽ
+  const ae = document.activeElement, focusKey = !keep && ae && main.querySelector(".panel")?.contains(ae) ? ae.getAttribute("aria-label") : null;
+  const caret = focusKey && "selectionStart" in ae ? [ae.selectionStart, ae.selectionEnd, ae.scrollTop] : null;
   if (!keep) main.querySelectorAll("audio, video").forEach(m => m.pause());
   setCurrent(d.preset.name, d.quick.title || d.name, [d.status.voice_s ? fmtT(d.status.voice_s) : null, `${d.beats.length} mốc`, d.aspect].filter(Boolean).join(" · "));
   document.getElementById("railNav").replaceChildren(qRail());
   const [center, panel] = (QSCREENS[Q.screen] || QSCREENS.board)();
   main.className = panel ? "app" : "app single";
   main.replaceChildren(...[center, panel ? (keep || panel) : null].filter(Boolean));
+  const back = focusKey ? [...main.querySelectorAll(".panel [aria-label]")].find(x => x.getAttribute("aria-label") === focusKey) : null;
+  if (back) { back.focus(); if (caret) try { back.setSelectionRange(caret[0], caret[1]); back.scrollTop = caret[2]; } catch { /* ô không có con trỏ */ } }
 };
 function qSteps() {
   const d = Q.data, st = d.status, b = st.beats;
@@ -98,35 +118,49 @@ function qRail() {
 }
 
 // ================= việc nền =================
-async function qJob(kind, { instruction = "", options = null, confirmText = null } = {}) {
-  const q = Q.data.quick;
-  if (kind === "clips" && !q.flow.video_model) { toast("Chọn model clip trong Cài đặt trước.", true); Q.screen = "board"; Q.sel = null; Q.render(); return; }
-  const gen = !!FLOW_JOBS[kind];
-  if (gen && !confirm(`Sẽ ${FLOW_JOBS[kind]} trong ${provLabel(qProvider(kind))} (phiên Chrome đã đăng nhập, tốn lượt/tín dụng gói). Đừng thao tác Chrome khi đang chạy. Tiếp tục?`)) return;
+// job clip cần model clip; false → đã báo và mở Cài đặt
+function qClipModelOk(kind) {
+  if (kind !== "clips" || Q.data.quick.flow.video_model) return true;
+  toast("Chọn model clip trong Cài đặt trước.", true); Q.screen = "board"; Q.sel = null; Q.render(); return false;
+}
+function qConfirmGen(kind) {
+  return confirm(`Sẽ ${FLOW_JOBS[kind]} trong ${provLabel(qProvider(kind))} (phiên Chrome đã đăng nhập, tốn lượt/tín dụng gói). Đừng thao tác Chrome khi đang chạy. Tiếp tục?`);
+}
+async function qJob(kind, { instruction = "", options = null, confirmText = null, confirmed = false } = {}) {
+  const name = Q.name, gen = !!FLOW_JOBS[kind];
+  if (!qClipModelOk(kind)) return;
+  if (gen && !confirmed && !qConfirmGen(kind)) return;
   if (confirmText && !confirm(confirmText)) return;
   try {
-    S.job = await qPost("/jobs", { kind, instruction, options: options || {}, provider: gen && Q.provider ? Q.provider : null });
-    Q.data.job = S.job;
-    toast(`Bắt đầu: ${S.job.label}`); Q.render(); startPolling(); qAutoRefresh();
-  } catch (e) { toast(e.message, true); }
+    const job = await qPost("/jobs", { kind, instruction, options: options || {}, provider: gen && Q.provider ? Q.provider : null }, name);
+    S.job = job; startPolling(); // việc nền là chung cả máy: luôn theo dõi
+    if (!qActive(name)) return;
+    Q.data.job = job;
+    toast(`Bắt đầu: ${job.label}`); Q.render(); qAutoRefresh();
+  } catch (e) { qSay(name, e.message, true); }
 }
 async function qStop() {
+  const name = Q.name;
   if (!confirm("Dừng việc đang chạy? Ảnh/clip đã gen giữ nguyên.")) return;
-  try { await qPost("/jobs/stop"); toast("Đã dừng"); } catch (e) { toast(e.message, true); }
-  await Q.open(Q.name);
+  try { await qPost("/jobs/stop", {}, name); qSay(name, "Đã dừng"); } catch (e) { qSay(name, e.message, true); }
+  if (qActive(name)) await Q.open(name);
 }
 async function qRetryErrors() {
+  const name = Q.name, kind = Q.data.beats.some(b => b.error) ? "flow" : "clips";
+  if (!qClipModelOk(kind) || !qConfirmGen(kind)) return; // hỏi trước: bấm Hủy thì lỗi vẫn giữ nguyên
   try {
-    const img = await qPost("/retry", { ns: null, clip: false });
-    const clip = await qPost("/retry", { ns: null, clip: true });
+    const img = await qPost("/retry", { ns: null, clip: false }, name);
+    const clip = await qPost("/retry", { ns: null, clip: true }, name);
+    if (!qActive(name)) return;
     toast(`Đã đưa ${img.count + clip.count} mốc lỗi về hàng chờ`);
     await qReload();
-    await qJob(img.count ? "flow" : "clips");
-  } catch (e) { toast(e.message, true); }
+    if (qActive(name)) await qJob(kind, { confirmed: true });
+  } catch (e) { qSay(name, e.message, true); }
 }
 async function qPick(n) {
-  try { const r = await qPost("/pick", { n }); toast(`Đã chọn: ${r.title}`); } catch (e) { toast(e.message, true); }
-  await Q.open(Q.name);
+  const name = Q.name;
+  try { const r = await qPost("/pick", { n }, name); qSay(name, `Đã chọn: ${r.title}`); } catch (e) { qSay(name, e.message, true); }
+  if (qActive(name)) await Q.open(name);
 }
 
 // ================= Bảng mốc — vùng giữa =================
@@ -187,14 +221,14 @@ function qSceneList(beats) {
     scenes[scenes.length - 1].beats.push(b);
   }
   scenes.forEach((s, i) => {
-    const lead = s.beats.flatMap(b => b.refs).map(qChar).find(c => c && c.color);
+    const lead = s.beats.flatMap(b => b.refs).map(qChar).find(c => c && qColor(c.color));
     s.color = lead ? lead.color : SCENE_COLORS[i % SCENE_COLORS.length];
     s.index = i + 1;
   });
   return scenes;
 }
 function qRefChip(id) {
-  const c = qChar(id)?.color || "#4A4F6E";
+  const c = qColor(qChar(id)?.color, "#4A4F6E");
   return h("span", { class: "ref mono", style: `background:${c}1F;color:color-mix(in srgb, ${c} 70%, #0E1238)` }, "@" + id);
 }
 function qThumbLabel(b) {
@@ -308,12 +342,13 @@ function qSettings() {
   const psel = key => { const s = h("select", {}, PROVIDERS.map(([v, l]) => h("option", { value: v }, l))); s.value = f[key] || "flow"; s.onchange = () => { f[key] = s.value; }; return s; };
   const max = h("input", { type: "number", min: 0, max: 200 }); max.value = f.max_clips; max.oninput = () => { f.max_clips = Number(max.value); };
   const cont = h("input", { type: "checkbox" }); cont.checked = f.allow_cont; cont.onchange = () => { f.allow_cont = cont.checked; };
+  const name = Q.name;
   const save = async () => {
     if (f.max_clips > 0 && !f.video_model) { toast("Chọn model clip (bắt buộc khi số clip > 0).", true); return; }
     try {
-      await qPost("/settings", { image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider || "flow", video_provider: f.video_provider || "flow", max_clips: f.max_clips, allow_cont: f.allow_cont });
-      toast("Đã lưu cài đặt"); await qRefresh();
-    } catch (e) { toast(e.message, true); }
+      await qPost("/settings", { image_model: f.image_model, video_model: f.video_model, resolution: f.resolution, image_provider: f.image_provider || "flow", video_provider: f.video_provider || "flow", max_clips: f.max_clips, allow_cont: f.allow_cont }, name);
+      qSay(name, "Đã lưu cài đặt"); await qRefresh(name);
+    } catch (e) { qSay(name, e.message, true); }
   };
   return h("div", { class: "detail" }, h("h2", {}, "Cài đặt video"), h("p", { class: "hint" }, "Bấm một mốc trên bảng để xem chi tiết."),
     h("label", { class: "f" }, h("span", { class: "flabel" }, "Model ảnh"), sel("image_model", IMAGE_MODELS)),
@@ -326,37 +361,40 @@ function qSettings() {
     h("button", { class: "primary", onclick: save }, "Lưu cài đặt"));
 }
 async function qSaveReview(n, clip) {
-  const key = `${n}:${clip ? "clip" : "img"}`, b = qBeat(n), saved = clip ? b.clip.prompt : b.prompt;
+  const name = Q.name, key = `${n}:${clip ? "clip" : "img"}`, b = qBeat(n), saved = clip ? b.clip.prompt : b.prompt;
   const text = (key in Q.drafts ? Q.drafts[key] : saved).trim();
   if (!text) { toast("Prompt rỗng.", true); return; }
-  try { if (text !== saved) await qPost("/prompt", { n, prompt: text, clip }); } catch (e) { toast(e.message, true); return; }
+  try { if (text !== saved) await qPost("/prompt", { n, prompt: text, clip }, name); } catch (e) { qSay(name, e.message, true); return; }
+  if (!qActive(name)) return;
   delete Q.drafts[key];
   Q.reviewing[key] = true;
-  await qRefresh();
+  await qRefresh(name);
   try {
-    const r = await qPost("/review", { n, clip });
-    toast(`Mốc ${n}: ${r.review.verdict === "pass" ? "đạt" : "trượt"} ${r.review.score}/10`, r.review.verdict !== "pass");
-  } catch (e) { toast(e.message, true); }
-  delete Q.reviewing[key];
-  await qRefresh();
+    const r = await qPost("/review", { n, clip }, name);
+    qSay(name, `Mốc ${n}: ${r.review.verdict === "pass" ? "đạt" : "trượt"} ${r.review.score}/10`, r.review.verdict !== "pass");
+  } catch (e) { qSay(name, e.message, true); }
+  if (Q.name === name) delete Q.reviewing[key];
+  await qRefresh(name, { keepPanel: Q.sel !== n }); // đang sửa mốc khác → giữ nguyên khung phải (con trỏ, chữ đang gõ)
 }
 async function qOverride(n, clip) {
-  const key = `${n}:${clip ? "clip" : "img"}`, b = qBeat(n), saved = clip ? b.clip.prompt : b.prompt;
+  const name = Q.name, key = `${n}:${clip ? "clip" : "img"}`, b = qBeat(n), saved = clip ? b.clip.prompt : b.prompt;
   if (!confirm(`Duyệt tay prompt ${clip ? "clip" : "ảnh"} mốc ${n} (cho phép gen dù chưa đạt kiểm duyệt)?`)) return;
   try {
     const text = key in Q.drafts ? Q.drafts[key].trim() : "";
-    if (text && text !== saved) await qPost("/prompt", { n, prompt: text, clip });
-    delete Q.drafts[key];
-    await qPost("/override", { n, clip }); toast(`Mốc ${n}: đã duyệt tay`);
-  } catch (e) { toast(e.message, true); }
-  await qRefresh();
+    if (text && text !== saved) await qPost("/prompt", { n, prompt: text, clip }, name);
+    if (Q.name === name) delete Q.drafts[key];
+    await qPost("/override", { n, clip }, name); qSay(name, `Mốc ${n}: đã duyệt tay`);
+  } catch (e) { qSay(name, e.message, true); }
+  await qRefresh(name);
 }
 async function qRedo(n, clip) {
-  try { await qPost("/redo", { ns: [n], clip }); toast(`Mốc ${n}: chờ gen lại ${clip ? "clip" : "ảnh"}`); } catch (e) { toast(e.message, true); }
-  await qRefresh();
+  const name = Q.name;
+  try { await qPost("/redo", { ns: [n], clip }, name); qSay(name, `Mốc ${n}: chờ gen lại ${clip ? "clip" : "ảnh"}`); } catch (e) { qSay(name, e.message, true); }
+  await qRefresh(name);
 }
 async function qToggleClip(n, on) {
-  try { await qPost("/clip", { ns: [n], on }); } catch (e) { toast(e.message, true); }
-  await qRefresh();
+  const name = Q.name;
+  try { await qPost("/clip", { ns: [n], on }, name); } catch (e) { qSay(name, e.message, true); }
+  await qRefresh(name);
 }
 QSCREENS.board = qBoard;
