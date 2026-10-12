@@ -146,7 +146,7 @@ def load_quick(root: Path) -> QuickProject:
         raise VidflowError(f"Không thấy {path} — tạo bằng `vidflow quick new`.")
     try:
         return QuickProject.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
-    except ValidationError as e:
+    except (ValidationError, yaml.YAMLError) as e:
         raise VidflowError(f"{path} không hợp lệ: {e}") from e
 
 

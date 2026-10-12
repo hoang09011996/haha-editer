@@ -2,18 +2,23 @@
 from __future__ import annotations
 
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from vidflow.errors import VidflowError
-from vidflow.quick import ops
+from vidflow.quick import chars, clips, ops
 from vidflow.quick.chars import CharRef, char_rows, lookup
-from vidflow.quick.model import CHAR_ID, is_quick, load_beats, load_quick
+from vidflow.quick.model import CHAR_ID, create_quick, is_quick, load_beats, load_quick
 from vidflow.quick.preset import ID_RE, channel_refs_dir, list_presets, load_preset
 from vidflow.ui.jobs import JobRunner
+from vidflow.ui.quick_jobs import check_quick_job
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 CHAR_RE = re.compile(CHAR_ID)
@@ -27,7 +32,7 @@ def media_url(root: Path, name: str, rel: str | None) -> str | None:
     f = Path(root) / rel
     if not f.is_file():
         return None
-    return f"/media/{name}/{rel}?v={int(f.stat().st_mtime)}"
+    return f"/media/{name}/{quote(rel)}?v={int(f.stat().st_mtime)}"
 
 
 def char_url(name: str, preset_id: str, ref: CharRef | None) -> str | None:
@@ -94,6 +99,88 @@ def renders(root: Path, name: str) -> list[dict]:
     return [{"file": f"out/{f.name}", "url": media_url(root, name, f"out/{f.name}"),
              "size_mb": round(f.stat().st_size / 1e6, 1),
              "mtime": datetime.fromtimestamp(f.stat().st_mtime).isoformat(timespec="seconds")} for f in files]
+
+
+Provider = Literal["flow", "gemini", "aistudio"]
+
+
+class NewQuick(BaseModel):
+    name: str = ""
+    preset: str
+    topic: str = ""
+    channel_chars: list[str] | None = None  # None = mọi nhân vật bộ kênh
+    image_model: str = "Nano Banana 2"
+    video_model: str = ""
+    resolution: str = "720p"
+    image_provider: Provider = "flow"
+    video_provider: Provider = "flow"
+    max_clips: int = Field(default=12, ge=0, le=200)
+    allow_cont: bool = True
+    start: bool = True  # chạy job đề xuất ý tưởng ngay
+
+
+class SettingsReq(BaseModel):
+    image_model: str | None = None
+    video_model: str | None = None
+    resolution: str | None = None
+    image_provider: Provider | None = None
+    video_provider: Provider | None = None
+    max_clips: int | None = None
+    allow_cont: bool | None = None
+    channel_chars: list[str] | None = None
+
+
+class PickReq(BaseModel):
+    n: int
+
+
+class BeatsReq(BaseModel):
+    ns: list[int] = Field(min_length=1)
+    clip: bool = False
+
+
+class RetryReq(BaseModel):
+    ns: list[int] | None = None
+    clip: bool = False
+
+
+class ClipReq(BaseModel):
+    ns: list[int] = Field(min_length=1)
+    on: bool
+
+
+class PromptReq(BaseModel):
+    n: int
+    prompt: str
+    clip: bool = False
+
+
+class BeatReq(BaseModel):
+    n: int
+    clip: bool = False
+
+
+class QuickJobReq(BaseModel):
+    kind: str
+    instruction: str = ""
+    options: dict = Field(default_factory=dict)
+    provider: str | None = None  # ghi đè nguồn gen một lần (sheets/flow/clips)
+
+
+def default_name(preset: str) -> str:
+    return f"{preset}-{datetime.now():%m%d-%H%M%S}"[:41]
+
+
+def ideas_hint(topic: str) -> str:
+    topic = topic.strip()
+    return f"Chủ đề người dùng gợi ý: {topic} — cả 5 ý tưởng xoay quanh chủ đề này." if topic else ""
+
+
+def _do(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except VidflowError as e:
+        raise HTTPException(422, str(e))
 
 
 def quick_router(projects_root: Path, runner: JobRunner) -> APIRouter:
@@ -164,5 +251,109 @@ def quick_router(projects_root: Path, runner: JobRunner) -> APIRouter:
         if not f.is_file():
             raise HTTPException(404, "Không có file")
         return FileResponse(f)
+
+    def start_quick_job(name: str, root: Path, kind: str, **kw):
+        """JobRunner.start cho job nhanh, đổi lỗi thành HTTP: tham số/điều kiện sai → 400 (mất project → 404),
+        đang bận → 409."""
+        try:
+            return runner.start(kind, name, root, quick=True, **kw)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        except (ValueError, VidflowError) as e:
+            if not is_quick(root):
+                raise HTTPException(404, f"Không có video nhanh '{name}'")
+            raise HTTPException(400, str(e))
+
+    @router.post("/api/quick", status_code=201)
+    def create(req: NewQuick):
+        if not ID_RE.match(req.preset):
+            raise HTTPException(422, f"Không có bộ kênh '{req.preset}'")
+        name = req.name.strip() or default_name(req.preset)
+        if not NAME_RE.match(name):
+            raise HTTPException(422, "Tên thư mục chỉ gồm chữ thường không dấu, số, '-' hoặc '_'")
+        root = projects_root / name
+        if root.exists():
+            raise HTTPException(409, f"'{name}' đã tồn tại")
+        if req.max_clips > 0 and not req.video_model.strip():
+            raise HTTPException(422, "Chọn model clip động (bắt buộc khi số clip tối đa > 0).")
+        try:
+            load_preset(req.preset)
+            create_quick(root, preset=req.preset, title=req.topic.strip())
+            ops.update_settings(root, image_model=req.image_model, video_model=req.video_model,
+                                resolution=req.resolution, image_provider=req.image_provider,
+                                video_provider=req.video_provider, max_clips=req.max_clips, allow_cont=req.allow_cont,
+                                channel_chars=req.channel_chars)
+        except VidflowError as e:
+            shutil.rmtree(root, ignore_errors=True)
+            raise HTTPException(422, str(e))
+        out = {"name": name, "job": None, "warning": None}
+        if req.start:
+            try:  # video đã tạo xong: không chạy được việc ý tưởng chỉ là cảnh báo, không phải lỗi
+                job = start_quick_job(name, root, "ideas", instruction=ideas_hint(req.topic))
+                out["job"] = job.to_dict(tail=0)
+            except HTTPException as e:
+                out["warning"] = f"{e.detail} — bấm “Đề xuất 5 ý tưởng” sau."
+        return out
+
+    @router.post("/api/quick/{name}/settings")
+    def settings(name: str, req: SettingsReq):
+        q = _do(ops.update_settings, qroot(name), **req.model_dump(exclude_unset=True))
+        return {"quick": q.model_dump(mode="json")}
+
+    @router.post("/api/quick/{name}/pick")
+    def pick(name: str, req: PickReq):
+        return {"title": _do(ops.pick_idea, qroot(name), req.n).title}
+
+    @router.post("/api/quick/{name}/redo")
+    def redo(name: str, req: BeatsReq):
+        _do(ops.mark_redo, qroot(name), req.ns, clip=req.clip)
+        return {"ok": True}
+
+    @router.post("/api/quick/{name}/retry")
+    def retry(name: str, req: RetryReq):
+        return {"count": _do(ops.clear_errors, qroot(name), req.ns, clip=req.clip)}
+
+    @router.post("/api/quick/{name}/clip")
+    def clip_toggle(name: str, req: ClipReq):
+        _do(clips.set_clip_enabled, qroot(name), req.ns, req.on)
+        return {"ok": True}
+
+    @router.post("/api/quick/{name}/prompt")
+    def prompt_ep(name: str, req: PromptReq):
+        beat = _do(ops.edit_prompt, qroot(name), req.n, req.prompt, clip=req.clip)
+        return {"beat": beat.model_dump(mode="json")}
+
+    @router.post("/api/quick/{name}/override")
+    def override(name: str, req: BeatReq):
+        _do(ops.set_review, qroot(name), req.n, "override", score=0, issues=["người dùng duyệt tay"], clip=req.clip)
+        return {"ok": True}
+
+    @router.post("/api/quick/{name}/chars/{char_id}/promote")
+    def promote(name: str, char_id: str):
+        root = qroot(name)
+        if not CHAR_RE.match(char_id):
+            raise HTTPException(404, f"Không có nhân vật @{char_id}")
+        _do(chars.promote, root, char_id)
+        return {"ok": True}
+
+    @router.post("/api/quick/{name}/jobs", status_code=202)
+    def start_job(name: str, req: QuickJobReq):
+        root = qroot(name)
+        try:
+            check_quick_job(req.kind, root, req.options, req.provider)
+        except (VidflowError, ValueError) as e:
+            raise HTTPException(400, str(e))
+        # Job.provider = nguồn thực dùng (ghi đè, hoặc theo cài đặt) do JobRunner.start chọn qua begin_gen
+        job = start_quick_job(name, root, req.kind, instruction=req.instruction, options=req.options,
+                              provider=req.provider)
+        return job.to_dict(tail=0)
+
+    @router.post("/api/quick/{name}/jobs/stop")
+    def stop_job(name: str):
+        qroot(name)
+        cur = runner.current
+        if cur is None or cur.project != name or not runner.stop():
+            raise HTTPException(409, "Không có việc đang chạy của video này")
+        return {"stopped": True}
 
     return router
