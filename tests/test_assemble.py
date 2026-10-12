@@ -90,6 +90,11 @@ def test_plan_no_images_errors(tmp_path):
         plan_images(d)
 
 
+def test_plan_keeps_beat_number(tmp_path):
+    d = touch(tmp_path / "imgs", "001_00-00.jpg", "007_00-03.jpg")
+    assert [p.n for p in plan_images(d)] == [1, 7]
+
+
 # ---------- assemble (pyCapCut, ảnh thật nhỏ) ----------
 
 @pytest.fixture
@@ -198,6 +203,34 @@ def test_assemble_audio_and_subtitles(small_images, acfg, tmp_path):
     assert not track_segs(load(rep2.draft_dir), "text")
     # draft cũ được backup
     assert (acfg.media_folder / "backups" / "S2" / "vidflow_proj" / "draft_info.json").is_file()
+
+
+@needs_ffmpeg
+def test_assemble_with_clips(small_images, acfg, tmp_path):
+    from conftest import make_mp4
+    from vidflow.capcut_draft import cover_scale
+
+    long_clip = make_mp4(tmp_path / "dl" / "002_00-02.mp4", 3.0)   # mốc 2 dài 1 s → cắt
+    short_clip = make_mp4(tmp_path / "dl" / "004_00-05.mp4", 1.0)  # mốc 4 dài 4 s → làm chậm
+    rep = run(small_images, acfg, clips={2: long_clip, 4: short_clip})
+    assert rep.count == 4 and rep.clips == 2
+    content = load(rep.draft_dir)
+    segs = track_segs(content, "video")
+    assert len(segs) == 4
+    t = 0
+    for s in segs:  # vẫn liền mạch
+        assert s["target_timerange"]["start"] == t
+        t += s["target_timerange"]["duration"]
+    assert t == 9_000_000
+    vids = {m["id"]: m for m in content["materials"]["videos"]}
+    s1, s2, s4 = segs[0], segs[1], segs[3]
+    assert str(acfg.media_folder / "vidflow_proj" / "clips") in vids[s2["material_id"]]["path"]
+    assert s2["source_timerange"] == {"start": 0, "duration": 1_000_000} and s2["speed"] == 1.0
+    assert s2["volume"] == 0.5 and not s2["common_keyframes"]
+    assert s2["clip"]["scale"]["x"] == pytest.approx(cover_scale(216, 384, 1920, 1080), rel=1e-4)
+    assert s4["target_timerange"]["duration"] == 4_000_000
+    assert s4["speed"] == pytest.approx(0.25, rel=0.05)
+    assert s1["volume"] == 0.0 and "images" in vids[s1["material_id"]]["path"]
 
 
 @needs_ffmpeg

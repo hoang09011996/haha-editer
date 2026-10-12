@@ -40,6 +40,7 @@ def test_build_passes_args(tmp_path, fake_assemble):
     assert kw["name"] == "myvid"
     assert kw["aspect"] == "16:9"
     assert kw["cfg"] is cfg
+    assert kw["clips"] == {}
     assert load_quick(root).stage == "built"
 
 
@@ -69,3 +70,20 @@ def test_build_cli(tmp_path, fake_assemble):
     r = CliRunner().invoke(app, ["quick", "build", "-p", str(root)])
     assert r.exit_code == 0, r.output
     assert len(fake_assemble) == 1
+
+
+def test_build_passes_ready_clips(tmp_path, fake_assemble):
+    from vidflow.quick.model import Clip
+
+    root = tmp_path / "v"
+    create_quick(root, preset="doodle-giai-ma", title="T")
+    save_beats(root, Beats(aspect="16:9", beats=[
+        Beat(n=1, start=0.0, end=1.0, text="A.", image="images/001_00-00.jpg", status="ok",
+             clip=Clip(enabled=True, status="ok", file="clips/001_00-00.mp4")),
+        Beat(n=2, start=1.0, end=2.0, text="B.", image="images/002_00-01.jpg", status="ok",
+             clip=Clip(enabled=True, status="redo", file="clips/002_00-01.mp4"))]))
+    for rel in ("images/001_00-00.jpg", "images/002_00-01.jpg", "clips/001_00-00.mp4", "clips/002_00-01.mp4"):
+        (root / rel).write_bytes(b"x")
+    build_quick(root, Config())
+    _, kw = fake_assemble[0]
+    assert kw["clips"] == {1: root / "clips" / "001_00-00.mp4"}

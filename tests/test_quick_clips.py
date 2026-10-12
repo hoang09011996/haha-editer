@@ -131,3 +131,15 @@ def test_set_clip_prompts_error_to_redo_when_prompt_changes(qroot):
     clips.set_clip_prompts(qroot, [{"n": 1, "prompt": CP + " Slower.", "verdict": "pass", "score": 8}])
     c = load_beats(qroot).get(1).clip
     assert c.status == "redo" and c.error == ""
+
+
+def test_ready_clips_only_enabled_ok_and_on_disk(qroot, P, img):
+    _ready(qroot, P, img, 1)
+    _ready(qroot, P, img, 2)
+    _ready(qroot, P, img, 3)
+    clips.set_clip_prompts(qroot, [{"n": n, "prompt": CP, "verdict": "pass", "score": 8} for n in (1, 2, 3)])
+    for n in (1, 2, 3):
+        clips.set_clip(qroot, n, img(f"v{n}.mp4", b"mp4"))
+    clips.set_clip_enabled(qroot, [2], False)          # người dùng tắt clip → dùng ảnh
+    (qroot / "clips" / "003_00-08.mp4").unlink()         # file mất → bỏ qua
+    assert clips.ready_clips(qroot, load_beats(qroot)) == {1: qroot / "clips" / "001_00-00.mp4"}

@@ -22,6 +22,7 @@ ZOOM = 1.08           # zoom nhẹ xen kẽ 1.0 ↔ 1.08 (so với mức phủ k
 SUB_STYLE = dict(size=7.0, color=(1.0, 1.0, 1.0), align=1, auto_wrapping=True, max_line_width=0.82)
 SUB_BG = dict(color="#000000", alpha=0.6, round_radius=0.2, style=1)
 SUB_Y = -0.8
+CLIP_VOLUME = 0.5     # tiếng clip Veo, nhỏ dưới giọng đọc
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class Placement:
     file: Path
     start: float
     end: float
+    n: int = 0  # số mốc NNN
 
 
 @dataclass
@@ -38,6 +40,7 @@ class AssembleReport:
     total_s: float
     skipped_files: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    clips: int = 0
 
 
 def load_beats(path: Path) -> list[dict]:
@@ -108,7 +111,7 @@ def plan_images(images_dir: Path, beats: Path | list[dict] | None = None, audio_
             warnings.append(f"Audio dài {audio_len:.2f}s ngắn hơn mốc ảnh cuối {last_start:g}s; ảnh cuối kéo {TAIL_S:g}s")
         last_end = last_start + TAIL_S
     ends = [t for _, t, _ in found[1:]] + [last_end]
-    return [Placement(f, float(t), float(e)) for (_, t, f), e in zip(found, ends)]
+    return [Placement(f, float(t), float(e), n) for (n, t, f), e in zip(found, ends)]
 
 
 def default_name(images_dir: Path) -> str:
@@ -141,7 +144,8 @@ def _pick_aspect(plan: list[Placement]) -> str:
 
 
 def assemble(images_dir: Path, *, audio: Path | None = None, beats: Path | None = None, name: str | None = None,
-             aspect: str = "auto", zoom: bool = True, subtitles: bool = True, cfg: Config,
+             aspect: str = "auto", zoom: bool = True, subtitles: bool = True, clips: dict[int, Path] | None = None,
+             cfg: Config,
              is_running: Callable[[], bool] | None = None, stamp: Callable[[], str] = _stamp) -> AssembleReport:
     import pycapcut as cc
 
@@ -189,10 +193,25 @@ def assemble(images_dir: Path, *, audio: Path | None = None, beats: Path | None 
         stage = _MediaStage(_Dir(images_dir), stage_root / "images")
         materials: dict[str, cc.VideoMaterial] = {}
         kp = cc.KeyframeProperty
+        clips = clips or {}
+        n_clips = 0
         for i, p in enumerate(plan):
+            a, b = _us(p.start), _us(p.end)
+            clip_path = clips.get(p.n)
+            if clip_path is not None:
+                # clip thay ảnh: cắt theo độ dài mốc; clip ngắn hơn mốc → làm chậm cho vừa (pyCapCut không giữ khung cuối)
+                clip_path = Path(clip_path)
+                path = _MediaStage(_Dir(clip_path.parent), stage_root / "clips")(clip_path.name)
+                mat = materials.get(path) or materials.setdefault(path, cc.VideoMaterial(path))
+                base = cover_scale(mat.width, mat.height, w, h)
+                draft.add_segment(cc.VideoSegment(mat, cc.Timerange(a, b - a),
+                                                  source_timerange=cc.Timerange(0, min(mat.duration, b - a)),
+                                                  clip_settings=cc.ClipSettings(scale_x=base, scale_y=base),
+                                                  volume=CLIP_VOLUME))
+                n_clips += 1
+                continue
             path = stage(p.file.name)
             mat = materials.get(path) or materials.setdefault(path, cc.VideoMaterial(path))
-            a, b = _us(p.start), _us(p.end)
             base = cover_scale(mat.width, mat.height, w, h)
             seg = cc.VideoSegment(mat, cc.Timerange(a, b - a), clip_settings=cc.ClipSettings(scale_x=base, scale_y=base),
                                   volume=0.0)
@@ -231,4 +250,4 @@ def assemble(images_dir: Path, *, audio: Path | None = None, beats: Path | None 
     # CapCut 9.5 macOS đọc draft_info.json; pyCapCut chỉ ghi draft_content.json
     shutil.copy(draft_dir / "draft_content.json", draft_dir / "draft_info.json")
     return AssembleReport(draft_dir=draft_dir, count=len(plan), total_s=plan[-1].end,
-                          skipped_files=skipped, warnings=warnings)
+                          skipped_files=skipped, warnings=warnings, clips=n_clips)

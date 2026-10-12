@@ -102,3 +102,14 @@ def clip_todo(root: Path) -> dict:
     if rows and not q.flow.video_model:
         raise VidflowError("Chưa chọn model clip — `vidflow quick settings -p <project> --video-model \"Veo 3.1 Lite\"`.")
     return {"aspect": beats.aspect, "video_model": q.flow.video_model, "resolution": q.flow.resolution, "clips": rows}
+
+
+def ready_clips(root: Path, beats: Beats) -> dict[int, Path]:
+    """Clip dùng được khi dựng draft/xuất MP4: đã bật, status ok, file còn trên đĩa. {n: đường dẫn}."""
+    root = Path(root)
+    out: dict[int, Path] = {}
+    for b in beats.beats:
+        c = b.clip
+        if c.enabled and c.status == "ok" and c.file and (root / c.file).is_file():
+            out[b.n] = root / c.file
+    return out
