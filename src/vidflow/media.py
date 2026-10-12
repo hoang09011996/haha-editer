@@ -32,13 +32,19 @@ def floor_ms(x: float) -> float:
 
 
 def probe_duration(path: Path) -> float:
-    r = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True,
-    )
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError as e:
+        raise VidflowError("Không thấy `ffprobe` — cài ffmpeg (`brew install ffmpeg`).") from e
     if r.returncode != 0 or not r.stdout.strip():
         raise VidflowError(f"ffprobe không đọc được {path}: {r.stderr.strip()}")
-    return float(r.stdout.strip())
+    try:
+        return float(r.stdout.strip())
+    except ValueError as e:
+        raise VidflowError(f"ffprobe trả độ dài không hợp lệ cho {path}: {r.stdout.strip()!r}") from e
 
 
 def video_duration(path: Path) -> float:

@@ -1,11 +1,19 @@
+import json
+import subprocess
+from pathlib import Path
+
 import pytest
+from typer.testing import CliRunner
 
 from conftest import write_wav
+from vidflow.cli import app
 from vidflow.errors import VidflowError
 from vidflow.quick import clips, ops
 from vidflow.quick import render as rq
 from vidflow.quick.model import load_beats, save_beats
 from vidflow.quick.preset import load_preset, save_preset
+
+runner = CliRunner()
 
 
 def edit(root, fn):
@@ -168,3 +176,113 @@ def test_logo_music_and_switches(qroot, img, quick_presets, tmp_path):
     logo.unlink()
     plan = rq.build_render_props(qroot)
     assert plan.props["logo"] is None and any("logo" in w for w in plan.warnings)
+
+
+@pytest.fixture
+def remotion(tmp_path):
+    """Thư mục remotion/ giả đã 'npm ci' (chỉ cần node_modules/@remotion/cli)."""
+    d = tmp_path / "remotion"
+    (d / "node_modules" / "@remotion" / "cli").mkdir(parents=True)
+    return d
+
+
+def fake_run(calls, rc=0):
+    def run(cmd, **kw):
+        calls.append((cmd, kw))
+        if rc == 0:
+            Path(cmd[5]).write_bytes(b"mp4")
+        return subprocess.CompletedProcess(cmd, rc)
+    return run
+
+
+def test_write_props_and_public_dir(qroot, img):
+    with_images(qroot, img, ns=(1,))
+    (qroot / "out" / "vid-v1.mp4").write_bytes(b"old")
+    path, plan = rq.write_render_props(qroot)
+    assert path == (qroot / "tmp" / "render-props.json").resolve()
+    assert json.loads(path.read_text(encoding="utf-8")) == plan.props
+    public = qroot / "tmp" / "render" / "public"
+    link = public / "images" / "001_00-00.png"
+    assert link.is_symlink() and link.resolve() == (qroot / "images" / "001_00-00.png").resolve()
+    assert not (public / "out").exists() and not (public / "images" / "002_00-04.png").exists()
+    (public / "stray.txt").write_text("x")
+    rq.write_render_props(qroot)
+    assert not (public / "stray.txt").exists()                     # dựng lại sạch
+    assert (qroot / "images" / "001_00-00.png").read_bytes()       # file thật còn nguyên
+
+
+def test_next_output_versions(qroot):
+    out = (qroot / "out").resolve()
+    assert rq.next_output(qroot) == out / "vid-v1.mp4"
+    for name in ("vid-v1.mp4", "vid-v3.mp4", "other-v9.mp4", "vid-v2-test.mp4"):
+        (out / name).write_bytes(b"x")
+    assert rq.next_output(qroot) == out / "vid-v4.mp4"
+
+
+def test_render_runs_remotion_with_absolute_paths(qroot, img, remotion, monkeypatch):
+    with_images(qroot, img)
+    monkeypatch.chdir(qroot.parent)
+    calls = []
+    res = rq.render_quick(Path("vid"), run=fake_run(calls), remotion_dir=remotion, npx="npx")
+    cmd, kw = calls[0]
+    root = qroot.resolve()
+    assert cmd[:5] == ["npx", "remotion", "render", "src/index.ts", "DoodleVideo"]
+    assert cmd[5] == str(root / "out" / "vid-v1.mp4")
+    assert cmd[6] == f"--props={root / 'tmp' / 'render-props.json'}"
+    assert cmd[7] == f"--public-dir={root / 'tmp' / 'render' / 'public'}"
+    assert kw["cwd"] == remotion
+    assert res.output == root / "out" / "vid-v1.mp4" and res.output.is_file()
+    assert res.props_path == root / "tmp" / "render-props.json" and res.duration == 16.0
+    rq.render_quick(qroot, run=fake_run(calls), remotion_dir=remotion, npx="npx")
+    assert calls[1][0][5] == str(root / "out" / "vid-v2.mp4")
+
+
+def test_render_failure_leaves_no_output(qroot, img, remotion):
+    with_images(qroot, img)
+
+    def run(cmd, **kw):
+        Path(cmd[5]).write_bytes(b"half")  # Remotion chết giữa chừng
+        return subprocess.CompletedProcess(cmd, 1)
+
+    with pytest.raises(VidflowError, match="mã 1"):
+        rq.render_quick(qroot, run=run, remotion_dir=remotion, npx="npx")
+    assert list((qroot / "out").glob("*.mp4")) == []
+    assert rq.next_output(qroot).name == "vid-v1.mp4"
+
+
+def test_render_requires_remotion_install_and_npx(qroot, img, remotion, tmp_path, monkeypatch):
+    with_images(qroot, img)
+    with pytest.raises(VidflowError, match="npm ci"):
+        rq.render_quick(qroot, run=fake_run([]), remotion_dir=tmp_path / "nope", npx="npx")
+    monkeypatch.setattr(rq.shutil, "which", lambda name: None)
+    with pytest.raises(VidflowError, match="npx"):
+        rq.render_quick(qroot, run=fake_run([]), remotion_dir=remotion)
+
+
+def test_cli_render(qroot, img, remotion, monkeypatch):
+    with_images(qroot, img)
+    calls = []
+    monkeypatch.setattr(rq, "REMOTION_DIR", remotion)
+    monkeypatch.setattr(rq.subprocess, "run", fake_run(calls))
+    monkeypatch.setattr(rq.shutil, "which", lambda name: "/usr/local/bin/npx")
+    r = runner.invoke(app, ["quick", "render", "-p", str(qroot), "--resolution", "1080p", "--transition", "cut",
+                            "--clip-fit", "speed", "--no-zoom", "--no-subtitles", "--no-clip-audio", "--no-logo",
+                            "--no-music"])
+    assert r.exit_code == 0, r.output
+    assert "vid-v1.mp4" in r.output and calls[0][0][0] == "/usr/local/bin/npx"
+    props = json.loads((qroot / "tmp" / "render-props.json").read_text(encoding="utf-8"))
+    assert (props["width"], props["zoom"], props["subtitles"], props["clipVolume"]) == (1920, False, [], 0.0)
+    assert all(b["fade"] == 0.0 for b in props["beats"])
+    r = runner.invoke(app, ["quick", "render", "-p", str(qroot), "--props-only"])
+    assert r.exit_code == 0, r.output
+    assert "render-props.json" in r.output and len(calls) == 1
+    r = runner.invoke(app, ["quick", "render", "-p", str(qroot), "--transition", "wipe"])
+    assert r.exit_code == 1 and "Traceback" not in r.output
+
+
+def test_garbage_voice_wav_is_vidflow_error(qroot, img):
+    with_images(qroot, img)
+    (qroot / "audio").mkdir(exist_ok=True)
+    (qroot / "audio" / "voice.wav").write_bytes(b"not a wav at all")
+    with pytest.raises(VidflowError, match="voice.wav hỏng"):
+        rq.build_render_props(qroot)

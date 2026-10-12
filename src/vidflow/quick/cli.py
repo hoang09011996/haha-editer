@@ -14,7 +14,7 @@ from vidflow.quick import chars, clips, jobs, ops
 from vidflow.quick.model import create_quick, load_quick, require_beats
 from vidflow.quick.preset import import_preset, list_presets, load_preset
 
-quick_app = typer.Typer(no_args_is_help=True, help="Quy trình nhanh: ý tưởng → mốc → giọng → ảnh Flow → CapCut")
+quick_app = typer.Typer(no_args_is_help=True, help="Quy trình nhanh: ý tưởng → mốc → giọng → ảnh Flow → MP4 (Remotion) / CapCut")
 preset_app = typer.Typer(no_args_is_help=True, help="Bộ kênh (brief + câu neo + giọng)")
 
 ProjectOpt = Annotated[Path, typer.Option("--project", "-p", help="Thư mục project nhanh")]
@@ -244,6 +244,39 @@ def build(project: ProjectOpt, name: Annotated[Optional[str], typer.Option(help=
 
     res = build_quick(project, load_config(config), name=name, zoom=zoom, subtitles=subtitles)
     typer.echo(f"Đã dựng draft: {res}")
+
+
+def _warn(lines: list[str]) -> None:
+    for w in lines:
+        typer.secho(f"  ! {w}", fg=typer.colors.YELLOW)
+
+
+@_cmd(quick_app, "render")
+def render(project: ProjectOpt,
+           resolution: Annotated[Optional[str], typer.Option(help="1080p | 720p (mặc định: độ phân giải Flow của video)")] = None,
+           transition: Annotated[str, typer.Option(help="scene (nối cảnh cắt thẳng, cảnh mới mờ chéo) | cut | fade")] = "scene",
+           clip_fit: Annotated[str, typer.Option(help="trim (cắt; clip ngắn giữ khung cuối) | speed (đổi tốc độ cho vừa)")] = "trim",
+           zoom: Annotated[bool, typer.Option("--zoom/--no-zoom")] = True,
+           subtitles: Annotated[bool, typer.Option("--subtitles/--no-subtitles")] = True,
+           clip_audio: Annotated[bool, typer.Option("--clip-audio/--no-clip-audio", help="Giữ tiếng của clip (nhỏ dưới giọng)")] = True,
+           logo: Annotated[bool, typer.Option("--logo/--no-logo", help="Logo kênh (trường logo của bộ kênh)")] = True,
+           music: Annotated[bool, typer.Option("--music/--no-music", help="Nhạc nền audio/music.mp3|wav nếu có")] = True,
+           props_only: Annotated[bool, typer.Option("--props-only", help="Chỉ ghi tmp/render-props.json, không render")] = False):
+    """Xuất MP4 bằng Remotion → out/<tên>-vN.mp4."""
+    from vidflow.quick import render as rq
+
+    opts = rq.RenderOptions(resolution=resolution, transition=transition, clip_fit=clip_fit, zoom=zoom,
+                            subtitles=subtitles, clip_audio=clip_audio, logo=logo, music=music)
+    if props_only:
+        path, plan = rq.write_render_props(project, opts)
+        _warn(plan.warnings)
+        typer.echo(f"Đã ghi {path}")
+        return
+    typer.echo("Đang render bằng Remotion (video dài có thể mất vài phút)…")
+    res = rq.render_quick(project, opts)
+    _warn(res.warnings)
+    m, s = divmod(res.duration, 60)
+    typer.echo(f"Đã xuất {res.output} ({int(m)}:{s:04.1f})")
 
 
 # ---- helper cho job Claude ----

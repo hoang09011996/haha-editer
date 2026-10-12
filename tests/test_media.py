@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 
 import pytest
 
@@ -39,3 +40,19 @@ def test_probe_missing_file(tmp_path):
 
 def test_floor_ms_keeps_exact_milliseconds():
     assert all(floor_ms(x / 1000) == x / 1000 for x in range(0, 20000))
+
+
+def test_probe_duration_without_ffprobe(tmp_path, monkeypatch):
+    def missing(*a, **kw):
+        raise FileNotFoundError("ffprobe")
+
+    monkeypatch.setattr(subprocess, "run", missing)
+    with pytest.raises(VidflowError, match="ffprobe"):
+        probe_duration(tmp_path / "a.mp4")
+
+
+def test_probe_duration_unparseable_output(tmp_path, monkeypatch):
+    monkeypatch.setattr(subprocess, "run",
+                        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout="N/A\n", stderr=""))
+    with pytest.raises(VidflowError, match="N/A"):
+        probe_duration(tmp_path / "a.mp4")

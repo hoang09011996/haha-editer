@@ -5,6 +5,11 @@
 """
 from __future__ import annotations
 
+import json
+import re
+import shutil
+import subprocess
+import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -15,6 +20,7 @@ from vidflow.quick.clips import ready_clips
 from vidflow.quick.model import load_quick, require_beats
 from vidflow.quick.ops import VOICE_FILE
 from vidflow.quick.preset import REPO, load_preset
+from vidflow.state import atomic_write_text
 
 FPS = 30
 FADE_S = 0.3              # mờ chéo khi mở cảnh mới
@@ -48,6 +54,14 @@ class RenderPlan:
     props: dict
     assets: dict[str, Path]  # đường dẫn trong public dir (= giá trị trong props) → file thật
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RenderResult:
+    output: Path
+    props_path: Path
+    duration: float
+    warnings: list[str]
 
 
 def canvas(resolution: str, aspect: str) -> tuple[int, int]:
@@ -94,7 +108,11 @@ def build_render_props(root: Path, opts: RenderOptions | None = None, *,
     audio = None
     voice_s = 0.0
     if voice.is_file():
-        audio, voice_s = VOICE_FILE, wav_duration(voice)
+        try:
+            voice_s = wav_duration(voice)
+        except (wave.Error, EOFError) as e:
+            raise VidflowError("audio/voice.wav hỏng hoặc không phải WAV PCM — chạy lại `vidflow quick voice`.") from e
+        audio = VOICE_FILE
         assets[VOICE_FILE] = voice
     else:
         warnings.append("Chưa có audio/voice.wav — video không có giọng đọc.")
@@ -167,3 +185,63 @@ def build_render_props(root: Path, opts: RenderOptions | None = None, *,
              "subtitles": subs, "zoom": opts.zoom, "clipVolume": CLIP_VOLUME if opts.clip_audio else 0.0,
              "logo": logo, "music": music, "musicVolume": MUSIC_VOLUME}
     return RenderPlan(props=props, assets=assets, warnings=warnings)
+
+
+def stage_public(root: Path, assets: dict[str, Path]) -> Path:
+    """Public dir cho Remotion: chỉ symlink tới đúng các file cần, cùng đường dẫn tương đối như trong project.
+    (Remotion copy cả public dir vào bundle mỗi lần render — trỏ thẳng vào project sẽ copy cả out/.)"""
+    public = Path(root) / PUBLIC_DIR
+    shutil.rmtree(public, ignore_errors=True)  # chỉ xóa symlink, không đụng file thật
+    public.mkdir(parents=True, exist_ok=True)
+    for rel, src in assets.items():
+        dest = public / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.symlink_to(Path(src).resolve())
+    return public
+
+
+def next_output(root: Path) -> Path:
+    root = Path(root).resolve()
+    pat = re.compile(rf"{re.escape(root.name)}-v(\d+)\.mp4")
+    out = root / "out"
+    nums = [int(m[1]) for f in (out.iterdir() if out.is_dir() else []) if (m := pat.fullmatch(f.name))]
+    return out / f"{root.name}-v{max(nums, default=0) + 1}.mp4"
+
+
+def write_render_props(root: Path, opts: RenderOptions | None = None, *,
+                       probe: Callable[[Path], float] | None = None) -> tuple[Path, RenderPlan]:
+    root = Path(root).resolve()
+    plan = build_render_props(root, opts, probe=probe)
+    path = root / PROPS_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(path, json.dumps(plan.props, ensure_ascii=False, indent=1))
+    stage_public(root, plan.assets)
+    return path, plan
+
+
+def render_cmd(npx: str, out: Path, props_path: Path, public: Path) -> list[str]:
+    return [npx, "remotion", "render", "src/index.ts", COMPOSITION, str(out),
+            f"--props={props_path}", f"--public-dir={public}"]
+
+
+def render_quick(root: Path, opts: RenderOptions | None = None, *, run: Callable | None = None,
+                 probe: Callable[[Path], float] | None = None, remotion_dir: Path | None = None,
+                 npx: str | None = None) -> RenderResult:
+    """Sinh props + public dir rồi `npx remotion render` (cwd=remotion/) → out/<tên>-vN.mp4."""
+    root = Path(root).resolve()
+    run = run or subprocess.run
+    remotion_dir = Path(remotion_dir or REMOTION_DIR)
+    if not (remotion_dir / "node_modules" / "@remotion" / "cli").is_dir():
+        raise VidflowError(f"Chưa cài Remotion — chạy `npm ci` trong {remotion_dir}.")
+    npx = npx or shutil.which("npx")
+    if not npx:
+        raise VidflowError("Không thấy `npx` — cài Node.js (`brew install node`).")
+    props_path, plan = write_render_props(root, opts, probe=probe)
+    out = next_output(root)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    rc = run(render_cmd(npx, out, props_path, root / PUBLIC_DIR), cwd=remotion_dir,
+             stdin=subprocess.DEVNULL).returncode
+    if rc or not out.is_file():
+        out.unlink(missing_ok=True)  # không để lại file dở dang
+        raise VidflowError(f"Remotion render lỗi (mã {rc}) — xem log phía trên; props: {props_path}")
+    return RenderResult(output=out, props_path=props_path, duration=plan.props["duration"], warnings=plan.warnings)
