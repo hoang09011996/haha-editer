@@ -114,3 +114,63 @@ def test_promote_refuses_duplicate_in_channel(qroot, img, quick_presets):
     assert [c.id for c in load_preset("doodle-giai-ma").characters].count("FARMER") == 1
     assert (qroot / "refs" / "FARMER.png").is_file()
     assert not (quick_presets / "refs" / "doodle-giai-ma" / "FARMER.png").exists()
+
+
+def _second_project(tmp_path):
+    from vidflow.quick.model import create_quick, save_beats
+    root = tmp_path / "vid2"
+    create_quick(root, preset="doodle-giai-ma", title="T2")
+    ops.set_beat_texts(root, ["A.", "B."])
+    b = load_beats(root)
+    for i, beat in enumerate(b.beats):
+        beat.start, beat.end = i * 4.0, i * 4.0 + 4.0
+    save_beats(root, b)
+    return root
+
+
+def test_promote_from_one_video_does_not_break_other(qroot, tmp_path, P):
+    other = _second_project(tmp_path)
+    for root in (qroot, other):
+        chars.set_chars(root, [FARMER])
+        ops.set_prompts(root, [{"n": 1, "prompt": P("@FARMER digging"), "verdict": "pass", "score": 8}])
+    chars.promote(qroot, "FARMER")
+    known = chars.lookup(other)
+    assert known["FARMER"].scope == "channel"
+    ops.status_summary(other)
+    chars.set_chars(other, [])
+    assert load_quick(other).characters == []
+
+
+def test_set_chars_in_use_still_counts_when_channel_filtered_out(qroot, tmp_path, P):
+    other = _second_project(tmp_path)
+    for root in (qroot, other):
+        chars.set_chars(root, [FARMER])
+    ops.set_prompts(other, [{"n": 1, "prompt": P("@FARMER digging"), "verdict": "pass", "score": 8}])
+    ops.update_settings(other, channel_chars=[])
+    chars.promote(qroot, "FARMER")
+    with pytest.raises(VidflowError, match="@FARMER"):
+        chars.set_chars(other, [])
+
+
+def test_narrowing_channel_chars_refuses_referenced(qroot, P):
+    ops.set_prompts(qroot, [{"n": 1, "prompt": P("@MODERNYOU waking"), "verdict": "pass", "score": 8}])
+    with pytest.raises(VidflowError, match="@MODERNYOU"):
+        ops.update_settings(qroot, channel_chars=[])
+    assert load_quick(qroot).channel_chars is None
+
+
+def test_narrowing_channel_chars_refuses_clip_prompt_ref(qroot, P):
+    from vidflow.quick import clips
+    clips.set_clip_prompts(qroot, [{"n": 2, "prompt": "@MODERNYOU stretching", "verdict": "pass", "score": 8}])
+    with pytest.raises(VidflowError, match="@MODERNYOU"):
+        ops.update_settings(qroot, channel_chars=[])
+
+
+def test_status_chars_missing_includes_unknown(qroot, P):
+    ops.set_prompts(qroot, [{"n": 1, "prompt": P("@MODERNYOU waking"), "verdict": "pass", "score": 8}])
+    b = load_beats(qroot)
+    b.beats[1].refs = ["GHOST"]
+    from vidflow.quick.model import save_beats
+    save_beats(qroot, b)
+    s = ops.status_summary(qroot)
+    assert s["chars_missing"] == ["GHOST", "MODERNYOU"]

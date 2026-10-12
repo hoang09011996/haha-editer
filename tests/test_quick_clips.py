@@ -111,3 +111,23 @@ def test_status_exposes_allow_cont(qroot):
     assert ops.status_summary(qroot)["allow_cont"] is True
     ops.update_settings(qroot, allow_cont=False)
     assert ops.status_summary(qroot)["allow_cont"] is False
+
+
+def test_set_prompts_clears_error_when_prompt_changes(qroot, P):
+    ops.set_prompts(qroot, [{"n": 1, "prompt": P("a"), "verdict": "pass", "score": 8}])
+    ops.record_fail(qroot, 1, "blocked")
+    ops.set_prompts(qroot, [{"n": 1, "prompt": P("a"), "verdict": "pass", "score": 8}])
+    assert load_beats(qroot).get(1).error == "blocked"
+    ops.set_prompts(qroot, [{"n": 1, "prompt": P("b"), "verdict": "pass", "score": 8}])
+    assert load_beats(qroot).get(1).error == ""
+
+
+def test_set_clip_prompts_error_to_redo_when_prompt_changes(qroot):
+    clips.set_clip_prompts(qroot, [{"n": 1, "prompt": CP, "verdict": "pass", "score": 8}])
+    ops.record_fail(qroot, 1, "blocked", clip=True)
+    clips.set_clip_prompts(qroot, [{"n": 1, "prompt": CP, "verdict": "pass", "score": 8}])
+    c = load_beats(qroot).get(1).clip
+    assert c.status == "error" and c.error == "blocked"
+    clips.set_clip_prompts(qroot, [{"n": 1, "prompt": CP + " Slower.", "verdict": "pass", "score": 8}])
+    c = load_beats(qroot).get(1).clip
+    assert c.status == "redo" and c.error == ""

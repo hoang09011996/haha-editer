@@ -52,8 +52,8 @@ def lookup(root: Path, q: QuickProject | None = None, preset: Preset | None = No
         if q.channel_chars is None or c.id in q.channel_chars:
             out[c.id] = CharRef(c, "channel", find_image(cdir, c.id))
     for c in q.characters:
-        if c.id in out:
-            raise VidflowError(f"@{c.id} trùng với nhân vật của bộ kênh — đổi tên nhân vật riêng của video.")
+        if c.id in out:  # đã được đưa vào bộ kênh (promote từ video khác) — bộ kênh thắng
+            continue
         out[c.id] = CharRef(c, "video", find_image(root / VIDEO_REFS, c.id))
     return out
 
@@ -90,7 +90,8 @@ def set_chars(root: Path, items: list[dict]) -> QuickProject:
     clash = sorted(set(ids) & {c.id for c in preset.characters})
     if clash:
         raise VidflowError(f"Trùng nhân vật của bộ kênh: {', '.join(clash)}")
-    in_use = sorted(({c.id for c in q.characters} - set(ids)) & _used_ids(root))
+    via_channel = {c.id for c in preset.characters if q.channel_chars is None or c.id in q.channel_chars}
+    in_use = sorted(({c.id for c in q.characters} - set(ids) - via_channel) & _used_ids(root))
     if in_use:
         raise VidflowError(f"Không xóa được nhân vật đang dùng trong prompt: {', '.join('@' + i for i in in_use)}")
     q.characters = new

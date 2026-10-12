@@ -98,6 +98,8 @@ def set_prompts(root: Path, items: list[dict]) -> Beats:
             raise VidflowError("verdict phải là pass hoặc fail")
         if "cont" in it:
             beat.cont = _check_cont(beat, bool(it["cont"]), q)
+        if prompt != beat.prompt:
+            beat.error = ""
         beat.prompt, beat.refs = prompt, refs
         beat.review = Review(verdict=verdict, score=float(it.get("score", 0)), issues=list(it.get("issues") or []))
     save_beats(root, beats)
@@ -254,6 +256,14 @@ def update_settings(root: Path, *, image_model: str | None = None, video_model: 
         unknown = [c for c in channel_chars if c not in have]
         if unknown:
             raise VidflowError(f"Bộ kênh không có: {', '.join('@' + u for u in unknown)}")
+        dropped = {c for c in have if q.channel_chars is None or c in q.channel_chars} - set(channel_chars)
+        dropped -= {c.id for c in q.characters}
+        beats = load_beats(root)
+        used = {r for b in (beats.beats if beats else []) for r in [*b.refs, *parse_refs(b.clip.prompt)]}
+        stranded = sorted(dropped & used)
+        if stranded:
+            raise VidflowError(f"Không bỏ được nhân vật bộ kênh đang dùng trong prompt: "
+                               f"{', '.join('@' + i for i in stranded)}")
         q.channel_chars = list(channel_chars)
     save_quick(root, q)
     return q
@@ -319,7 +329,7 @@ def status_summary(root: Path) -> dict:
             blocked += 1
         prev = b
     referenced = {r for b in bl for r in b.refs}
-    chars_missing = sorted(r for r in referenced if r in known and known[r].image is None)
+    chars_missing = sorted(r for r in referenced if r not in known or known[r].image is None)
     voice = root / VOICE_FILE
     try:
         voice_s = round(wav_duration(voice), 3) if voice.is_file() else None

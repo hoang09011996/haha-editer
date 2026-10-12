@@ -72,6 +72,8 @@ def _claude(kind: str, project: Path, print_only: bool):
         raise VidflowError("Chưa chọn ý tưởng — `vidflow quick pick -p ... <n>`.")
     if kind in ("prompts", "flow", "clips"):
         require_beats(project)
+    if kind == "clips" and not q.flow.video_model:
+        raise VidflowError("Chưa chọn model clip — `vidflow quick settings -p <project> --video-model \"Veo 3.1 Lite\"`.")
     preset = load_preset(q.preset)
     if print_only:
         typer.echo(jobs.claude_task(kind, project, preset))

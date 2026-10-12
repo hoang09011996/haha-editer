@@ -35,4 +35,6 @@ Video — mỗi cảnh, tuần tự (không chạy song song):
 
 Dừng ngay và báo director khi: gặp captcha/xác minh, hết tín dụng, Flow từ chối prompt (ghi nguyên văn thông báo), giao diện khác hẳn mô tả trên, hoặc lỗi lặp lại 2 lần ở cùng cảnh. Không bấm mua tín dụng, không đổi cài đặt tài khoản.
 
+Quy trình nhanh (`vidflow quick`): Flow từ chối prompt hoặc lỗi ở một mốc/clip KHÔNG phải điều kiện dừng — ghi `uv run vidflow quick fail -p <project> <n> [--clip] --reason "<nguyên văn>"` rồi làm mốc tiếp theo; chỉ dừng khi captcha, hết tín dụng, hoặc giao diện khác hẳn.
+
 Trả về: bảng `id | kết quả | clip đã import | ghi chú`, số tín dụng còn lại, rồi chạy `uv run vidflow preview -p <project>` và đưa đường dẫn preview.html.

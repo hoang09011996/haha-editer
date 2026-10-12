@@ -52,6 +52,8 @@ def set_clip_prompts(root: Path, items: list[dict]) -> Beats:
                                          issues=list(it.get("issues") or []))))
     _check_limit(beats, len({b.n for b, _, _ in staged if not b.clip.enabled}), q.max_clips)
     for b, prompt, review in staged:
+        if b.clip.status == "error" and prompt != b.clip.prompt:
+            b.clip.status, b.clip.error = "redo", ""
         b.clip.prompt, b.clip.review, b.clip.enabled = prompt, review, True
     save_beats(root, beats)
     return beats

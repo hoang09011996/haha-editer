@@ -174,6 +174,7 @@ def test_llm_commands_call_run_claude(qp, tmp_path, monkeypatch):
     ok(["quick", "pick", "-p", qp, 1])
     ok(["quick", "script", "-p", qp])
     ok(["quick", "set-beats", "-p", qp, "--json", _texts(tmp_path, ["A."])])
+    ok(["quick", "settings", "-p", qp, "--video-model", "Veo 3.1 Lite"])
     for kind in ("prompts", "sheets", "flow", "clips"):
         ok(["quick", kind, "-p", qp])
     monkeypatch.setattr(jobs, "run_claude", lambda *a, **kw: 2)
@@ -192,3 +193,15 @@ def test_preset_list_and_show():
     assert PRESET in r.output
     r = ok(["preset", "show", PRESET])
     assert "Hand-drawn 2D doodle" in r.output
+
+
+def test_clips_job_requires_video_model(qp, tmp_path, monkeypatch):
+    import vidflow.quick.jobs as jobs
+    calls = []
+    monkeypatch.setattr(jobs, "run_claude", lambda kind, *a, **kw: calls.append(kind) or 0)
+    ok(["quick", "set-beats", "-p", qp, "--json", _texts(tmp_path, ["A."])])
+    assert "Chưa chọn model clip" in fail(["quick", "clips", "-p", qp]).output
+    assert calls == []
+    ok(["quick", "settings", "-p", qp, "--video-model", "Veo 3.1 Lite"])
+    ok(["quick", "clips", "-p", qp])
+    assert calls == ["clips"]
