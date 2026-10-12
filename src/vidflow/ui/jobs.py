@@ -1,6 +1,8 @@
 """Chạy một việc nền (lệnh vidflow hoặc phiên `claude -p`) và theo dõi log."""
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
 import threading
@@ -118,11 +120,11 @@ class Job:
     def quota_exhausted(self) -> bool:
         """Job gen kết thúc vì hết lượt: không bị dừng tay, và mã 3 hoặc nguồn có mốc hết lượt cho loại media của job."""
         rc = self.proc.poll()
-        if rc is None or self.stopped:
-            return False
+        if rc is None or self.stopped or not self.provider:
+            return False  # chỉ job gen nhanh (có nguồn) mới có khái niệm hết lượt
         if rc == 3:
             return True
-        if not self.provider or self.root is None:
+        if self.root is None:
             return False
         try:
             return qjobs.limit_hit(self.root, self.provider, self.kind) is not None
@@ -176,22 +178,34 @@ class JobRunner:
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             log_path = logs / f"job-{stamp}-{kind}.log"
             f = open(log_path, "w", encoding="utf-8")
-            proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                    start_new_session=True)  # nhóm tiến trình riêng để dừng cả tiến trình con
             self.current = Job(kind, project, log_path, proc, stamp, scenes, f, label=label,
                                provider=provider or "", root=project_root)
             return self.current
 
-    def stop(self) -> bool:
-        """Dừng việc đang chạy (nút "Tạm dừng"). Trả False nếu không có việc nào đang chạy."""
+    def stop(self, timeout: float = 10) -> bool:
+        """Dừng việc đang chạy (nút "Tạm dừng") cùng mọi tiến trình con của nó (Remotion, công cụ của claude -p).
+        Trả False nếu không có việc nào đang chạy."""
         with self._lock:
             if not self.busy():
                 return False
             job = self.current
-            job.stopped = True
-            job.proc.terminate()
-            try:
-                job.proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                job.proc.kill()
-                job.proc.wait()
-            return True
+            if job.proc.poll() is None:
+                job.stopped = True
+            _signal_group(job.proc, signal.SIGTERM)
+        try:
+            job.proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            pass
+        _signal_group(job.proc, signal.SIGKILL)  # dọn tiến trình con còn sót (hoặc tiến trình chính bỏ qua SIGTERM)
+        job.proc.wait()
+        return True
+
+
+def _signal_group(proc: subprocess.Popen, sig: int) -> None:
+    """Gửi tín hiệu cho cả nhóm tiến trình của job (job chạy với start_new_session=True)."""
+    try:
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass

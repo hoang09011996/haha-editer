@@ -165,3 +165,46 @@ def test_quota_exhausted_flag(qroot, kind, code, want):
     job.proc.wait()
     d = job.to_dict()
     assert d["quota_exhausted"] is want and d["provider"] == "gemini"
+
+
+GRANDCHILD = """
+import subprocess, sys, time
+g = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+open(sys.argv[1], "w").write(str(g.pid))
+time.sleep(60)
+"""
+
+
+def test_stop_kills_grandchildren(qroot, tmp_path):
+    import os
+    import time
+
+    pid_file = tmp_path / "grandchild.pid"
+    r = CmdRunner([sys.executable, "-c", GRANDCHILD, str(pid_file)])
+    job = r.start("render", "vid", qroot, quick=True)
+    deadline = time.time() + 10
+    while not (pid_file.exists() and pid_file.read_text()) and time.time() < deadline:
+        time.sleep(0.05)
+    pid = int(pid_file.read_text())
+    assert r.stop(timeout=5) is True
+    assert job.state == "stopped"
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        os.kill(pid, 9)
+        pytest.fail("tiến trình cháu vẫn chạy sau khi dừng việc")
+
+
+def test_exit3_not_quota_for_full_pipeline_job(tmp_path):
+    class FullRunner(JobRunner):
+        def command_for(self, kind, project_root, scenes, instruction=""):
+            return [sys.executable, "-c", "import sys; sys.exit(3)"]
+
+    job = FullRunner().start("build", "vid", tmp_path / "vid")
+    job.proc.wait()
+    assert job.state == "failed" and job.to_dict()["quota_exhausted"] is False
